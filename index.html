@@ -825,6 +825,44 @@
         .share-uni-btn { border: none; border-radius: 10px; padding: 7px 14px; margin-left: 6px; font-weight: 700; cursor: pointer; background: rgba(102,126,234,0.18); color: var(--primary); }
         .share-uni-btn.save { margin-left: 0; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; }
         .share-uni-btn:hover { filter: brightness(1.08); }
+        /* ===== AI Tutor (Google AI) ===== */
+        .ai-overlay { position: fixed; inset: 0; z-index: 100000; background: rgba(10,12,24,0.55); display: none; align-items: center; justify-content: center; padding: 18px; }
+        .ai-overlay.show { display: flex; }
+        .ai-box { width: 100%; max-width: 580px; height: min(72vh, 640px); background: var(--bg-white); border-radius: 18px; box-shadow: 0 24px 70px rgba(0,0,0,0.35); display: flex; flex-direction: column; overflow: hidden; }
+        .ai-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; font-weight: 800; }
+        .ai-head small { font-weight: 600; opacity: 0.85; margin-left: 8px; font-size: 0.78em; }
+        .ai-head-btns button { background: rgba(255,255,255,0.16); border: none; color: #fff; border-radius: 9px; padding: 5px 10px; margin-left: 6px; cursor: pointer; font-size: 0.95em; }
+        .ai-head-btns button:hover { background: rgba(255,255,255,0.28); }
+        .ai-ctx { padding: 8px 18px; font-size: 0.8em; color: var(--text-light); background: var(--bg-light); border-bottom: 1px solid var(--border-light); }
+        .ai-msgs { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+        .ai-bub { max-width: 86%; padding: 10px 14px; border-radius: 14px; font-size: 0.93em; line-height: 1.55; white-space: pre-wrap; word-wrap: break-word; }
+        .ai-bub.user { align-self: flex-end; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; border-bottom-right-radius: 4px; }
+        .ai-bub.model { align-self: flex-start; background: var(--bg-light); color: var(--text-dark); border: 1px solid var(--border-light); border-bottom-left-radius: 4px; }
+        .ai-bub.err { align-self: flex-start; background: rgba(229,62,62,0.1); color: #b02a2a; border: 1px solid rgba(229,62,62,0.35); }
+        body.dark-theme .ai-bub.err { color: #ff9d9d; }
+        .ai-bub code { background: rgba(0,0,0,0.1); padding: 1px 5px; border-radius: 5px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.9em; }
+        body.dark-theme .ai-bub code { background: rgba(255,255,255,0.14); }
+        .ai-busy { align-self: flex-start; color: var(--text-light); font-size: 0.88em; padding: 4px 2px; }
+        .ai-busy .dots::after { content: '…'; animation: aiDots 1.2s steps(4) infinite; }
+        @keyframes aiDots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+        .ai-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 4px 0; }
+        .ai-chip { border: 1.5px solid var(--primary); background: transparent; color: var(--primary); border-radius: 999px; padding: 6px 13px; font-size: 0.84em; font-weight: 700; cursor: pointer; }
+        .ai-chip:hover { background: rgba(102,126,234,0.12); }
+        .ai-inrow { display: flex; gap: 10px; padding: 12px 18px; border-top: 1px solid var(--border-light); background: var(--bg-white); }
+        .ai-in { flex: 1; min-width: 0; border: 2px solid var(--border-light); border-radius: 12px; padding: 10px 12px; font-family: inherit; font-size: 0.95em; background: var(--bg-white); color: var(--text-dark); resize: none; }
+        .ai-in:focus { outline: none; border-color: var(--primary); }
+        .ai-send { border: none; border-radius: 12px; padding: 0 20px; font-weight: 800; cursor: pointer; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; }
+        .ai-send:disabled { opacity: 0.5; cursor: default; }
+        .ai-setup { flex: 1; overflow-y: auto; padding: 22px; font-size: 0.92em; line-height: 1.6; color: var(--text-dark); }
+        .ai-setup h3 { margin: 0 0 10px; }
+        .ai-setup ol { padding-left: 20px; margin: 10px 0; }
+        .ai-setup li { margin: 6px 0; }
+        .ai-setup a { color: var(--primary); font-weight: 700; }
+        .ai-key-row { display: flex; gap: 8px; margin-top: 14px; }
+        .ai-key-in { flex: 1; min-width: 0; border: 2px solid var(--border-light); border-radius: 10px; padding: 9px 11px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.88em; background: var(--bg-white); color: var(--text-dark); }
+        .ai-setup-note { margin-top: 12px; font-size: 0.85em; color: var(--text-light); }
+        .ai-setup-err { margin-top: 10px; color: #b02a2a; font-weight: 700; }
+        body.dark-theme .ai-setup-err { color: #ff9d9d; }
         .share-toast {
             position: fixed; left: 50%; bottom: 32px;
             transform: translateX(-50%) translateY(20px);
@@ -2148,6 +2186,7 @@
             <button class="header-btn" id="themeBtn" onclick="toggleTheme()">🌙 Dark Mode</button>
             <button class="header-btn" id="soundBtn" onclick="toggleSound()">🔊 Sound On</button>
             <button class="header-btn" id="shareBtn" onclick="shareApp()" title="Share the whole Science Playground">🔗 Share</button>
+            <button class="header-btn" id="aiBtn" onclick="openAiPanel()" title="Ask the AI tutor any science question (Google AI)">🤖 AI Tutor</button>
             <button class="header-btn" id="settingsBtn" onclick="openSettings()">⚙️ Settings</button>
         </div>
     </div>
@@ -2231,6 +2270,7 @@
                     <button class="modal-act-btn" onclick="watchVideo()" title="Watch related videos on this topic">📺 Video</button>
                     <button class="modal-act-btn" id="audiobookBtn" onclick="toggleAudiobook()" title="Listen to a spoken explanation">🎧 Audiobook</button>
                     <button class="modal-act-btn" onclick="modalShare()" title="Share a link to this simulation">🔗 Share</button>
+                    <button class="modal-act-btn" onclick="openAiPanel()" title="Ask the AI tutor about this topic">🤖 Ask AI</button>
                 </div>
             </div>
 
@@ -13045,6 +13085,195 @@ function drawPeriodicTrends(ctx, canvas) {
             const s = simulations.find(x => x.id === id);
             if (!s) return;
             openShareDialog(buildShareUrl(s.id), s.name, s.name);
+        }
+
+        // ===== AI TUTOR MODE — Google AI (Gemini API), key stays in this browser only =====
+        const AI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
+        let aiMessages = [];      // { role: 'user' | 'model', text, err? }
+        let aiBusy = false;
+
+        function aiKey() { try { return (localStorage.getItem('geminiApiKey') || '').trim(); } catch (e) { return ''; } }
+        function setAiKeyStored(k) { try { k ? localStorage.setItem('geminiApiKey', k) : localStorage.removeItem('geminiApiKey'); } catch (e) { } }
+        function aiPreferredModel() { try { return localStorage.getItem('geminiModel') || AI_MODELS[0]; } catch (e) { return AI_MODELS[0]; } }
+
+        function aiContextLine() {
+            if (!currentSimulation) return 'Browsing the app home screen — ask anything about science!';
+            return 'Talking about: ' + currentSimulation.icon + ' ' + currentSimulation.name + ' (' + currentSimulation.category + ')';
+        }
+        function aiSystemPrompt() {
+            let ctx;
+            if (currentSimulation) {
+                ctx = 'The student currently has the "' + currentSimulation.name + '" simulation open (category: ' + currentSimulation.category + '). Topic: ' + currentSimulation.description + '.';
+                const vals = [];
+                document.querySelectorAll('#controlsContainer .control-item').forEach(item => {
+                    const l = item.querySelector('.control-label'), v = item.querySelector('.control-value-display');
+                    if (l && v) vals.push(l.textContent.replace(/:\s*$/, '') + ' = ' + v.textContent);
+                });
+                if (vals.length) ctx += ' Current simulation settings: ' + vals.join(', ') + '.';
+            } else {
+                ctx = 'The student is on the app home screen browsing topics across Physics, Biology, Chemistry and Computer Science.';
+            }
+            return 'You are Sci, the friendly AI tutor built into the "Science Playground" learning app — an interactive collection of 3D science simulations for students. ' +
+                'Explain ideas clearly and simply with short paragraphs and concrete everyday examples; define any jargon you use. ' +
+                'When helpful, point at what the student can DO in the open simulation (drag to rotate, move the sliders, press Play). ' +
+                'Stay on science and learning topics. Keep answers under about 200 words unless the student asks for more detail. ' + ctx;
+        }
+
+        async function callGemini() {
+            const key = aiKey();
+            const contents = aiMessages.filter(m => !m.err).slice(-12).map(m => ({ role: m.role, parts: [{ text: m.text }] }));
+            const body = JSON.stringify({ system_instruction: { parts: [{ text: aiSystemPrompt() }] }, contents: contents });
+            const models = [aiPreferredModel()].concat(AI_MODELS.filter(m => m !== aiPreferredModel()));
+            let lastMsg = 'Unknown error';
+            for (let i = 0; i < models.length; i++) {
+                let res;
+                try {
+                    res = await fetch('https://generativelanguage.googleapis.com/v1beta/models/' + models[i] + ':generateContent?key=' + encodeURIComponent(key), {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body
+                    });
+                } catch (e) {
+                    throw { msg: 'Could not reach Google AI — check your internet connection and try again.' };
+                }
+                const data = await res.json().catch(() => ({}));
+                if (res.status === 404) { lastMsg = 'Model ' + models[i] + ' unavailable'; continue; }   // try the next model
+                if (!res.ok) {
+                    const msg = (data.error && data.error.message) || ('HTTP ' + res.status);
+                    if (res.status === 401 || res.status === 403 || (res.status === 400 && /API key/i.test(msg))) throw { badKey: true, msg: msg };
+                    if (res.status === 429) throw { msg: 'Google AI rate limit reached — wait a few seconds and send again.' };
+                    throw { msg: msg };
+                }
+                try { localStorage.setItem('geminiModel', models[i]); } catch (e) { }
+                const cand = data.candidates && data.candidates[0];
+                const text = ((cand && cand.content && cand.content.parts) || []).map(p => p.text || '').join('').trim();
+                if (!text) throw { msg: 'Google AI returned an empty answer' + (cand && cand.finishReason ? ' (' + cand.finishReason + ')' : '') + ' — try rephrasing.' };
+                return text;
+            }
+            throw { msg: lastMsg + ' — none of the Gemini models responded.' };
+        }
+
+        function aiPanelEl() {
+            let p = document.getElementById('aiPanel');
+            if (!p) {
+                p = document.createElement('div');
+                p.id = 'aiPanel';
+                p.className = 'ai-overlay';
+                p.onclick = e => { if (e.target === p) closeAiPanel(); };
+                p.innerHTML =
+                    '<div class="ai-box" role="dialog" aria-modal="true" aria-label="AI Tutor">' +
+                        '<div class="ai-head"><span>🤖 AI Tutor<small>powered by Google AI</small></span>' +
+                            '<span class="ai-head-btns">' +
+                                '<button onclick="aiShowSetup()" title="API key settings">⚙️</button>' +
+                                '<button onclick="closeAiPanel()" aria-label="Close">✕</button>' +
+                            '</span></div>' +
+                        '<div class="ai-ctx" id="aiCtx"></div>' +
+                        '<div class="ai-msgs" id="aiMsgs"></div>' +
+                        '<div class="ai-setup" id="aiSetup" style="display:none"></div>' +
+                        '<div class="ai-inrow" id="aiInRow">' +
+                            '<textarea class="ai-in" id="aiInput" rows="1" placeholder="Ask a science question…"></textarea>' +
+                            '<button class="ai-send" id="aiSendBtn" onclick="aiSend()">Send</button>' +
+                        '</div></div>';
+                document.body.appendChild(p);
+                const inp = p.querySelector('#aiInput');
+                inp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); aiSend(); } });
+            }
+            return p;
+        }
+        function openAiPanel() {
+            SFX.play('click');
+            const p = aiPanelEl();
+            p.classList.add('show');
+            document.getElementById('aiCtx').textContent = aiContextLine();
+            if (!aiKey()) { aiShowSetup(); return; }
+            aiShowChat();
+        }
+        function closeAiPanel() { const p = document.getElementById('aiPanel'); if (p) p.classList.remove('show'); }
+        function aiShowChat() {
+            document.getElementById('aiSetup').style.display = 'none';
+            document.getElementById('aiMsgs').style.display = 'flex';
+            document.getElementById('aiInRow').style.display = 'flex';
+            aiRender();
+            setTimeout(() => { const i = document.getElementById('aiInput'); if (i) i.focus(); }, 30);
+        }
+        function aiShowSetup(errMsg) {
+            const s = document.getElementById('aiSetup');
+            document.getElementById('aiMsgs').style.display = 'none';
+            document.getElementById('aiInRow').style.display = 'none';
+            s.style.display = 'block';
+            s.innerHTML =
+                '<h3>Connect Google AI</h3>' +
+                'The AI Tutor answers with <b>Google AI (Gemini)</b>. It needs your own free API key — it is saved <b>only in this browser</b> and is sent only to Google.' +
+                '<ol><li>Open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> (free Google account)</li>' +
+                '<li>Click <b>Create API key</b> and copy it</li>' +
+                '<li>Paste it below</li></ol>' +
+                '<div class="ai-key-row">' +
+                    '<input type="password" class="ai-key-in" id="aiKeyInput" placeholder="Paste your Gemini API key (AIza…)" value="' + aiKey().replace(/"/g, '&quot;') + '">' +
+                    '<button class="ai-send" onclick="saveAiKey()">Save</button>' +
+                '</div>' +
+                (aiKey() ? '<div class="ai-setup-note"><a href="javascript:void(0)" onclick="setAiKeyStored(\'\');aiShowSetup()">Remove saved key</a> · <a href="javascript:void(0)" onclick="aiShowChat()">Back to chat</a></div>' : '') +
+                (errMsg ? '<div class="ai-setup-err">⚠️ ' + aiEsc(errMsg) + '</div>' : '') +
+                '<div class="ai-setup-note">The key never touches this app\'s servers (there are none — this is a single-file app). Requests go straight from your browser to Google.</div>';
+            const inp = document.getElementById('aiKeyInput');
+            inp.onkeydown = e => { if (e.key === 'Enter') saveAiKey(); };
+            setTimeout(() => inp.focus(), 30);
+        }
+        function saveAiKey() {
+            const inp = document.getElementById('aiKeyInput');
+            const v = (inp.value || '').trim();
+            if (v.length < 20) { inp.style.borderColor = '#e53e3e'; inp.focus(); return; }
+            setAiKeyStored(v);
+            aiShowChat();
+        }
+        function aiEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+        function aiFmt(s) {
+            return aiEsc(s)
+                .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
+                .replace(/`([^`\n]+)`/g, '<code>$1</code>');
+        }
+        function aiRender() {
+            const box = document.getElementById('aiMsgs');
+            if (!box) return;
+            let h = '';
+            if (!aiMessages.length) {
+                h += '<div class="ai-bub model">Hi! I\'m <b>Sci</b> 👋 — ask me anything about ' + (currentSimulation ? aiEsc(currentSimulation.name) : 'science') + ', or try one of these:</div>' +
+                    '<div class="ai-chips">' +
+                        '<button class="ai-chip" onclick="aiAsk(\'Explain this topic simply\')">Explain it simply</button>' +
+                        '<button class="ai-chip" onclick="aiAsk(\'Give me a real-life example of this\')">Real-life example</button>' +
+                        '<button class="ai-chip" onclick="aiAsk(\'Quiz me with 3 questions about this topic\')">Quiz me</button>' +
+                    '</div>';
+            }
+            aiMessages.forEach(m => {
+                h += '<div class="ai-bub ' + (m.role === 'user' ? 'user' : (m.err ? 'err' : 'model')) + '">' + aiFmt(m.text) + '</div>';
+            });
+            if (aiBusy) h += '<div class="ai-busy">🤖 Sci is thinking<span class="dots"></span></div>';
+            box.innerHTML = h;
+            box.scrollTop = box.scrollHeight;
+            const btn = document.getElementById('aiSendBtn');
+            if (btn) btn.disabled = aiBusy;
+        }
+        function aiAsk(q) { const i = document.getElementById('aiInput'); if (i) i.value = q; aiSend(); }
+        async function aiSend() {
+            if (aiBusy) return;
+            const inp = document.getElementById('aiInput');
+            const q = (inp.value || '').trim();
+            if (!q) return;
+            inp.value = '';
+            aiMessages.push({ role: 'user', text: q });
+            aiBusy = true; aiRender();
+            try {
+                const answer = await callGemini();
+                aiMessages.push({ role: 'model', text: answer });
+            } catch (e) {
+                if (e && e.badKey) {
+                    aiBusy = false;
+                    aiShowSetup('Google AI rejected the key: ' + (e.msg || 'invalid key') + ' — paste a valid key.');
+                    aiMessages.pop();   // let the student re-ask after fixing the key
+                    return;
+                }
+                aiMessages.push({ role: 'model', err: true, text: '⚠️ ' + ((e && e.msg) || 'Something went wrong — please try again.') });
+            }
+            aiBusy = false;
+            aiRender();
+            const i2 = document.getElementById('aiInput'); if (i2) i2.focus();
         }
 
         function shareDialogEl() {
