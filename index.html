@@ -2539,6 +2539,7 @@ if __name__ == "__main__":
             { id: 'calculator', category: 'Physics', name: 'Scientific Calculator', icon: '🧮', description: 'Scientific calculator with physics constants' },
             { id: 'pendulum', category: 'Physics', name: 'Pendulum Motion', icon: '🎯', description: 'Harmonic oscillation - swinging motion' },
             { id: 'ships', category: 'Physics', name: 'Battleship (Ships)', icon: '🚢', description: '10×10 naval strategy — sink the enemy fleet before they sink yours' },
+            { id: 'turret-ai', category: 'Physics', name: 'Auto-Targeting Turret', icon: '📡', description: 'Naval turret AI — acquires the closest enemy in range and slews to track it (RotateTowards)' },
             { id: 'spring', category: 'Physics', name: 'Spring Oscillation', icon: '🔄', description: 'Hooke\'s Law - bouncing mass' },
             { id: 'projectile', category: 'Physics', name: 'Projectile Motion', icon: '🚀', description: 'Parabolic trajectory - launch angle control' },
             { id: 'free-fall', category: 'Physics', name: 'Free Fall', icon: '⬇️', description: 'Accelerating object - gravity simulation' },
@@ -3892,6 +3893,23 @@ if __name__ == "__main__":
                         <label class="control-label">Energy level:</label>
                         <input type="range" class="control-slider" id="bohrN" min="1" max="4" step="1" value="2" oninput="updateValue('bohrN_val', 'n = ' + this.value); drawSimulation()" style="width: 120px;">
                         <span class="control-value-display" id="bohrN_val">n = 2</span>
+                    </div>
+                `,
+                'turret-ai': `
+                    <div class="control-item">
+                        <label class="control-label">Slew rate:</label>
+                        <input type="range" class="control-slider" id="turretSlew" min="15" max="180" step="5" value="45" oninput="updateValue('turretSlew_val', this.value + '°/s'); if(window.Sci3D&&Sci3D.active)Sci3D.frame()" style="width: 110px;">
+                        <span class="control-value-display" id="turretSlew_val">45°/s</span>
+                    </div>
+                    <div class="control-item">
+                        <label class="control-label">Tracking range:</label>
+                        <input type="range" class="control-slider" id="turretRange" min="20" max="100" step="5" value="70" oninput="updateValue('turretRange_val', this.value + '%'); if(window.Sci3D&&Sci3D.active)Sci3D.frame()" style="width: 110px;">
+                        <span class="control-value-display" id="turretRange_val">70%</span>
+                    </div>
+                    <div class="control-item">
+                        <label class="control-label">Enemies:</label>
+                        <input type="range" class="control-slider" id="turretFoes" min="2" max="7" step="1" value="4" oninput="updateValue('turretFoes_val', this.value); if(window.Sci3D&&Sci3D.active)Sci3D.frame()" style="width: 100px;">
+                        <span class="control-value-display" id="turretFoes_val">4</span>
                     </div>
                 `,
                 'radioactive-decay': ``,
@@ -8734,7 +8752,7 @@ function drawCaesarCipher(ctx, c){
                     '<button class="ships-btn ghost" onclick="shipsToggleSrc()">🐍 View Python source</button></div>' +
                 '<pre class="ships-src" id="shipsSrc" style="display:none"></pre>';
             const src = document.getElementById('shipsSrc');
-            if (src) src.textContent = SHIPS_PY_SRC;
+            if (src) { const full = document.getElementById('pyEgBattleship'); src.textContent = (full ? full.textContent.trim() : SHIPS_PY_SRC); }
         }
         function shipsFire(r, c) {
             if (!SHIPS || SHIPS.over) return;
@@ -29959,6 +29977,121 @@ window.SCENES_3D['stack-queue'] = {
     }
   }
 };
+    // Auto-Targeting Turret — faithful 3D port of the NavalArt Lua turret-AI behavior
+    // (closest-target acquisition within maxTrackingRange + rate-limited RotateTowards slew + validity re-acquire).
+    window.SCENES_3D['turret-ai'] = {
+      build(api) {
+        const { THREE, group } = api;
+        const st = { yaw: 0, lastT: 0, fireCd: 0, seaHalf: 7, MAXFOES: 7, enemies: [], lockIdx: -1 };
+
+        // Sea + grid
+        const sea = new THREE.Mesh(new THREE.PlaneGeometry(15, 15),
+          new THREE.MeshStandardMaterial({ color: 0x1b5e86, roughness: 0.85, metalness: 0.1, side: THREE.DoubleSide }));
+        sea.rotation.x = -Math.PI / 2; sea.position.y = -0.05; group.add(sea);
+        const grid = new THREE.GridHelper(15, 30, 0x2e7fb0, 0x22597d); grid.position.y = -0.02;
+        grid.material.opacity = 0.5; grid.material.transparent = true; group.add(grid);
+
+        // Range ring (scaled each frame to maxTrackingRange)
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.98, 1.0, 72),
+          new THREE.MeshBasicMaterial({ color: 0x59d1ff, transparent: true, opacity: 0.55, side: THREE.DoubleSide }));
+        ring.rotation.x = -Math.PI / 2; ring.position.y = 0.02; group.add(ring); st.ring = ring;
+
+        // Turret: base + rotating housing + barrel (barrel points local +X)
+        const steel = new THREE.MeshStandardMaterial({ color: 0x9aa6b2, metalness: 0.6, roughness: 0.35 });
+        group.add(new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.7, 0.35, 24), new THREE.MeshStandardMaterial({ color: 0x556070, metalness: 0.5, roughness: 0.5 })));
+        const housing = new THREE.Group(); housing.position.y = 0.32; group.add(housing); st.housing = housing;
+        housing.add(new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.9), steel));
+        const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 1.7, 16), steel);
+        barrel.rotation.z = Math.PI / 2; barrel.position.set(0.95, 0.12, 0); housing.add(barrel);
+        st.barrelLen = 1.85; st.barrelY = 0.44;
+
+        // Lock line (turret → locked target) and muzzle tracer
+        st.lock = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+          new THREE.LineBasicMaterial({ color: 0x39ff88 })); st.lock.visible = false; group.add(st.lock);
+        st.tracer = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
+          new THREE.LineBasicMaterial({ color: 0xffd23f })); st.tracer.visible = false; group.add(st.tracer);
+
+        // Enemy fleet (build MAX; show/hide by slider). Each cruises a circular lane.
+        const hullMat = new THREE.MeshStandardMaterial({ color: 0x394452, roughness: 0.7, metalness: 0.2 });
+        const towerMat = new THREE.MeshStandardMaterial({ color: 0x6b2b2b, roughness: 0.6 });
+        for (let i = 0; i < st.MAXFOES; i++) {
+          const ship = new THREE.Group();
+          const hull = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.24, 0.34), hullMat); hull.position.y = 0.12; ship.add(hull);
+          const bow = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.42, 4), hullMat); bow.rotation.z = -Math.PI / 2; bow.position.set(0.62, 0.12, 0); ship.add(bow);
+          const tower = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.24, 0.24), towerMat); tower.position.set(-0.1, 0.32, 0); ship.add(tower);
+          const mark = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 12), new THREE.MeshStandardMaterial({ color: 0xff5a4d, emissive: 0x551111 }));
+          mark.position.y = 0.62; ship.add(mark);
+          group.add(ship);
+          st.enemies.push({ obj: ship, mark: mark,
+            rad: 1.7 + i * 0.62, w: (0.18 + i * 0.05) * (i % 2 ? -1 : 1), ph: i * 1.3,
+            cx: (i % 3 - 1) * 0.9, cz: ((i + 1) % 3 - 1) * 0.9 });
+        }
+        return st;
+      },
+      update(st, t, api) {
+        const THREE = api.THREE, slider = api.slider;
+        let dt = t - st.lastT; if (!(dt > 0) || dt > 0.25) dt = 1 / 60; st.lastT = t;
+
+        const rangePct = slider('turretRange', 70) / 100;
+        const maxRange = 1.4 + rangePct * 5.0;          // world-unit tracking range
+        const slew = slider('turretSlew', 45) * Math.PI / 180;  // rad/s
+        const foes = Math.round(slider('turretFoes', 4));
+
+        st.ring.scale.set(maxRange, maxRange, 1);
+
+        // Move enemies along their lanes; orient hull to heading; toggle by count.
+        for (let i = 0; i < st.enemies.length; i++) {
+          const e = st.enemies[i], on = i < foes; e.obj.visible = on; if (!on) continue;
+          const a = t * e.w + e.ph;
+          const x = e.cx + Math.cos(a) * e.rad, z = e.cz + Math.sin(a) * e.rad;
+          e.obj.position.set(x, 0, z);
+          e.obj.rotation.y = Math.atan2(-(Math.cos(a) * e.rad * e.w), (-Math.sin(a) * e.rad * e.w)); // face travel dir
+          e.dist = Math.hypot(x, z);
+          e.mark.material.emissiveIntensity = 0.4;
+          e.mark.scale.setScalar(1);
+        }
+
+        // ---- FindClosestTarget / IsTargetValid (Lua behavior) ----
+        const valid = i => i >= 0 && i < foes && st.enemies[i] && st.enemies[i].obj.visible && st.enemies[i].dist <= maxRange;
+        if (!valid(st.lockIdx)) {
+          st.lockIdx = -1; let min = maxRange;
+          for (let i = 0; i < foes; i++) { const e = st.enemies[i]; if (e && e.obj.visible && e.dist < min) { min = e.dist; st.lockIdx = i; } }
+        }
+
+        // ---- TrackTarget: rate-limited RotateTowards toward the locked bearing ----
+        let aligned = false;
+        if (st.lockIdx >= 0) {
+          const p = st.enemies[st.lockIdx].obj.position;
+          const targetYaw = Math.atan2(-p.z, p.x);       // barrel local +X → world bearing
+          let d = targetYaw - st.yaw; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+          const step = Math.max(-slew * dt, Math.min(slew * dt, d));
+          st.yaw += step;
+          aligned = Math.abs(d) < 0.06;
+          // highlight the locked ship
+          const m = st.enemies[st.lockIdx].mark; m.material.emissiveIntensity = 1.0; m.scale.setScalar(1.35 + Math.sin(t * 8) * 0.15);
+        }
+        st.housing.rotation.y = st.yaw;
+
+        // Barrel tip in world space (for lock line + tracer origin)
+        const tip = new THREE.Vector3(Math.cos(st.yaw) * st.barrelLen, st.barrelY, -Math.sin(st.yaw) * st.barrelLen);
+
+        // Lock line to the target
+        if (st.lockIdx >= 0) {
+          const p = st.enemies[st.lockIdx].obj.position;
+          st.lock.geometry.setFromPoints([tip, new THREE.Vector3(p.x, 0.3, p.z)]);
+          st.lock.visible = true;
+        } else st.lock.visible = false;
+
+        // Fire a tracer when aligned and off cooldown
+        st.fireCd -= dt;
+        if (aligned && st.fireCd <= 0 && st.lockIdx >= 0) {
+          const p = st.enemies[st.lockIdx].obj.position;
+          st.tracer.geometry.setFromPoints([tip, new THREE.Vector3(p.x, 0.3, p.z)]);
+          st.tracer.visible = true; st.tracer.material.opacity = 1; st.fireCd = 0.55; st._flash = 0.12;
+        }
+        if (st._flash > 0) { st._flash -= dt; st.tracer.material.transparent = true; st.tracer.material.opacity = Math.max(0, st._flash / 0.12); if (st._flash <= 0) st.tracer.visible = false; }
+      }
+    };
     window.QZ_EXTRA = [{"category":"Physics","desc":"Wave properties, sound, frequency, pitch and echoes.","emoji":"🔊","id":"b_waves","title":"Waves & Sound","questions":[{"q":"Sound cannot travel through which of these?","a":["Water","Steel","A vacuum","Air"],"c":2},{"q":"The pitch of a sound is determined mainly by its:","a":["Amplitude","Frequency","Speed","Loudness"],"c":1},{"q":"A louder sound wave has a greater:","a":["Amplitude","Wavelength","Frequency","Period"],"c":0},{"q":"An echo is produced when sound waves are:","a":["Absorbed by a surface","Refracted by air","Sped up by a wall","Reflected off a surface"],"c":3},{"q":"What is the approximate speed of sound in air at room temperature?","a":["3 m/s","340 m/s","3,000 m/s","300,000 km/s"],"c":1},{"q":"Which unit is used to measure frequency?","a":["Hertz (Hz)","Decibel (dB)","Metre (m)","Watt (W)"],"c":0},{"q":"The typical range of human hearing is about:","a":["2 Hz to 200 Hz","200 Hz to 2,000 Hz","20 Hz to 20,000 Hz","20,000 Hz to 200,000 Hz"],"c":2},{"q":"Sound waves in air are an example of which type of wave?","a":["Transverse","Electromagnetic","Surface","Longitudinal"],"c":3},{"q":"A wave has a frequency of 200 Hz and a wavelength of 1.5 m. What is its speed?","a":["133 m/s","300 m/s","201.5 m/s","3,000 m/s"],"c":1},{"q":"You shout at a cliff and hear the echo 2 seconds later. If sound travels at 340 m/s, how far away is the cliff?","a":["340 m","680 m","170 m","85 m"],"c":0}]},{"id":"b_electricity","title":"Electricity & Magnetism","emoji":"⚡","category":"Physics","desc":"Circuits, current, voltage, magnets and fields.","questions":[{"q":"What is electric current?","a":["The flow of electric charge","The storage of energy in a battery","The resistance of a wire","The brightness of a bulb"],"c":0},{"q":"Which unit is used to measure electric current?","a":["Volt","Ampere","Ohm","Watt"],"c":1},{"q":"Which material is a good conductor of electricity?","a":["Rubber","Glass","Copper","Plastic"],"c":2},{"q":"What happens if you bring the north poles of two magnets together?","a":["They attract each other","Nothing happens","They lose their magnetism","They repel each other"],"c":3},{"q":"In a circuit diagram, what does a battery provide?","a":["Resistance","Voltage","Magnetism","Insulation"],"c":1},{"q":"In a series circuit with two bulbs, what happens if one bulb burns out?","a":["Both bulbs go out","The other bulb gets brighter","The other bulb stays the same","The battery recharges"],"c":0},{"q":"Which device is used to measure voltage in a circuit?","a":["Ammeter","Thermometer","Voltmeter","Barometer"],"c":2},{"q":"According to Ohm's law, what is the current through a 6-ohm resistor connected to a 12-volt battery?","a":["72 A","0.5 A","6 A","2 A"],"c":3},{"q":"What can make an electromagnet stronger?","a":["Adding more turns of wire to the coil","Using thinner batteries","Removing the iron core","Using plastic wire instead of copper"],"c":0},{"q":"A generator produces electricity by which process?","a":["Static discharge","Electromagnetic induction","Chemical reaction","Nuclear fusion"],"c":1}]},{"category":"Physics","desc":"Gravity, planetary motion, satellites and tides.","emoji":"🪐","id":"b_space2","title":"Gravity & Orbits","questions":[{"q":"What force keeps the Moon in orbit around the Earth?","a":["Magnetism","Gravity","Friction","Air pressure"],"c":1},{"q":"If you dropped a hammer on the Moon, it would fall more slowly than on Earth because the Moon has...","a":["Weaker gravity","No sunlight","Colder rocks","A slower spin"],"c":0},{"q":"What mainly causes ocean tides on Earth?","a":["Wind blowing over the sea","Earthquakes on the sea floor","The Moon's gravitational pull","Heat from the Sun warming the water"],"c":2},{"q":"Which quantity stays the same for an astronaut who travels from Earth to the Moon?","a":["Weight","The force of gravity pulling on them","How high they can jump","Mass"],"c":3},{"q":"Why do planets closer to the Sun take less time to complete one orbit?","a":["They travel shorter paths and move faster","They are smaller than outer planets","They are hotter, which speeds them up","The Sun pushes them along"],"c":0},{"q":"Astronauts on the International Space Station float because they are...","a":["Beyond the reach of Earth's gravity","Held up by the station's engines","In constant free fall around the Earth","Lifted by air inside the station"],"c":2},{"q":"A geostationary satellite appears fixed over one spot on the equator because it...","a":["Hovers using thrusters","Completes one orbit in the same time Earth takes to rotate once","Is attached to a very long cable","Orbits the Moon instead of the Earth"],"c":1},{"q":"According to Newton, the gravitational force between two objects gets stronger when...","a":["The objects move faster","The objects become hotter","The objects spin more quickly","The objects have more mass or are closer together"],"c":3},{"q":"If the distance between two objects doubles, the gravitational force between them becomes...","a":["Half as strong","One quarter as strong","Twice as strong","Unchanged"],"c":1},{"q":"Kepler discovered that a planet's orbit around the Sun is shaped like...","a":["An ellipse with the Sun at one focus","A perfect circle with the Sun at the center","A spiral that slowly winds inward","A square with rounded corners"],"c":0}]},{"category":"Physics","desc":"Energy forms, transfer, conservation and temperature.","emoji":"🔥","id":"b_energy","title":"Energy & Heat","questions":[{"q":"What kind of energy does a moving car have because of its motion?","a":["Chemical energy","Kinetic energy","Nuclear energy","Sound energy"],"c":1},{"q":"A book resting on a high shelf has stored energy because of its position. What is this energy called?","a":["Gravitational potential energy","Kinetic energy","Electrical energy","Thermal energy"],"c":0},{"q":"Which unit is used to measure energy?","a":["Watt","Newton","Joule","Volt"],"c":2},{"q":"Heat always flows naturally from...","a":["a cold object to a hot object","a large object to a small object","a light object to a heavy object","a hot object to a cold object"],"c":3},{"q":"A metal spoon left in hot soup gets hot at the handle. Which type of heat transfer is this?","a":["Conduction","Convection","Radiation","Evaporation"],"c":0},{"q":"Warm air rising above a heater and cooler air sinking to replace it is an example of...","a":["Radiation","Convection","Conduction","Reflection"],"c":1},{"q":"How does the Sun's energy reach Earth through empty space?","a":["Conduction","Convection","Radiation","Sound waves"],"c":2},{"q":"What does the law of conservation of energy state?","a":["Energy slowly disappears as it is used","Energy can be created but not destroyed","Energy can only exist as heat","Energy cannot be created or destroyed, only transformed"],"c":3},{"q":"Temperature is a measure of which property of the particles in a substance?","a":["Their total mass","Their average kinetic energy","Their total volume","Their chemical energy"],"c":1},{"q":"A 100 g cup of water and a 1 kg bucket of water are both at 50 °C. Which statement is correct?","a":["The bucket stores more thermal energy, but both have the same temperature","The cup stores more thermal energy because it heats up faster","Both store exactly the same thermal energy","The bucket has a higher temperature because it has more water"],"c":0}]},{"id":"b_genetics","title":"Genetics & DNA","emoji":"🧬","category":"Biology","desc":"DNA, genes, inheritance and traits.","questions":[{"q":"Which molecule stores the genetic instructions in living things?","a":["Protein","DNA","Fat","Sugar"],"c":1},{"q":"What does the abbreviation DNA stand for?","a":["Deoxyribonucleic acid","Dinucleic acid","Double nuclear acid","Deoxyribose amino acid"],"c":0},{"q":"What is the shape of a DNA molecule?","a":["A single straight line","A flat ring","A double helix","A branching tree"],"c":2},{"q":"What is a gene?","a":["A whole cell","A type of protein","A section of cell membrane","A segment of DNA that codes for a trait"],"c":3},{"q":"In which part of a human cell is most DNA found?","a":["The cell wall","The nucleus","The ribosome","The cytoplasm only"],"c":1},{"q":"Which of these is one of the four bases in DNA?","a":["Lysine","Glucose","Guanine","Ribose"],"c":2},{"q":"In DNA, the base adenine (A) always pairs with which base?","a":["Thymine (T)","Guanine (G)","Cytosine (C)","Another adenine (A)"],"c":0},{"q":"How many chromosomes are found in a normal human body cell?","a":["23","24","48","46"],"c":3},{"q":"A dominant allele is one that:","a":["Only appears in males","Shows its effect even when paired with a recessive allele","Is always harmful","Is never passed to offspring"],"c":1},{"q":"The term 'phenotype' refers to an organism's:","a":["Set of alleles it carries","Number of chromosomes","Observable physical traits","Total amount of DNA"],"c":2}]},{"id":"b_bodysys","title":"Body Systems","emoji":"🫀","category":"Biology","desc":"Circulatory, respiratory, digestive and nervous systems.","questions":[{"q":"Which organ pumps blood around the body?","a":["The lungs","The heart","The stomach","The liver"],"c":1},{"q":"Which gas does the body absorb from the air in the lungs when you breathe in?","a":["Oxygen","Carbon dioxide","Nitrogen","Hydrogen"],"c":0},{"q":"Where does most digestion and absorption of nutrients take place?","a":["The stomach","The large intestine","The small intestine","The esophagus"],"c":2},{"q":"Which organ is the control center of the nervous system?","a":["The heart","The brain","The kidney","The lungs"],"c":1},{"q":"What are the tiny air sacs in the lungs where gas exchange happens called?","a":["Alveoli","Nephrons","Villi","Neurons"],"c":0},{"q":"Which type of blood vessel carries blood away from the heart?","a":["Veins","Capillaries","Arteries","Nerves"],"c":2},{"q":"Which component of blood carries oxygen to the body's cells?","a":["White blood cells","Platelets","Plasma","Red blood cells"],"c":3},{"q":"What is the basic cell of the nervous system that carries electrical signals?","a":["Neuron","Alveolus","Villus","Platelet"],"c":0},{"q":"Which muscle contracts and flattens to help pull air into the lungs?","a":["The biceps","The diaphragm","The heart","The tongue"],"c":1},{"q":"In which chamber does oxygen-rich blood from the lungs first enter the heart?","a":["Right ventricle","Right atrium","Left ventricle","Left atrium"],"c":3}]},{"id":"b_ecology","title":"Ecology & Environment","emoji":"🌍","category":"Biology","desc":"Food chains, ecosystems, cycles and conservation.","questions":[{"q":"In a food chain, which organism makes its own food?","a":["Lion","Rabbit","Grass","Mushroom"],"c":2},{"q":"An animal that eats only plants is called a...","a":["Herbivore","Carnivore","Omnivore","Decomposer"],"c":0},{"q":"The arrows in a food chain diagram show the flow of...","a":["Water","Air","Soil","Energy"],"c":3},{"q":"Which organisms break down dead plants and animals?","a":["Producers","Decomposers","Consumers","Herbivores"],"c":1},{"q":"Green plants make food using sunlight in a process called...","a":["Respiration","Digestion","Photosynthesis","Evaporation"],"c":2},{"q":"In the water cycle, when water turns into vapour and rises into the air, this is...","a":["Evaporation","Condensation","Precipitation","Freezing"],"c":0},{"q":"In the chain grass → grasshopper → frog → snake, which is the top predator?","a":["Grasshopper","Snake","Frog","Grass"],"c":1},{"q":"Which of these is a renewable resource?","a":["Coal","Oil","Natural gas","Sunlight"],"c":3},{"q":"Nitrogen-fixing bacteria, which turn nitrogen gas into a form plants can use, live mainly in...","a":["The root nodules of legume plants","The stomachs of cows","The surface of the ocean","Dry desert sand"],"c":0},{"q":"Roughly how much of the energy at one trophic level passes to the next level up?","a":["100%","50%","25%","10%"],"c":3}]},{"id":"b_atoms","title":"Atoms & Elements","emoji":"⚛️","category":"Chemistry","desc":"Atomic structure, elements and the periodic table.","questions":[{"q":"Which particle in an atom carries a negative charge?","a":["Proton","Neutron","Electron","Nucleus"],"c":2},{"q":"What is the chemical symbol for oxygen?","a":["O","Ox","Og","Om"],"c":0},{"q":"Where are protons and neutrons found in an atom?","a":["In the outer shells","In the nucleus","Spread evenly through the atom","Orbiting the electrons"],"c":1},{"q":"What does the atomic number of an element tell you?","a":["The number of neutrons","The number of electron shells","The total mass of the atom","The number of protons"],"c":3},{"q":"Which element has the symbol Na?","a":["Nitrogen","Sodium","Neon","Nickel"],"c":1},{"q":"An atom has 6 protons, 6 neutrons and 6 electrons. Which element is it?","a":["Carbon","Oxygen","Nitrogen","Boron"],"c":0},{"q":"Two atoms of the same element with different numbers of neutrons are called what?","a":["Ions","Molecules","Isotopes","Compounds"],"c":2},{"q":"In the periodic table, elements in the same vertical column (group) share what?","a":["The same number of neutrons","The same atomic mass","The same number of protons","Similar chemical properties"],"c":3},{"q":"An atom of aluminium has an atomic number of 13 and a mass number of 27. How many neutrons does it have?","a":["13","14","27","40"],"c":1},{"q":"A neutral atom loses one electron. What is its overall charge now?","a":["+1","-1","0","+2"],"c":0}]},{"category":"Chemistry","desc":"Reaction types, equations, acids/bases and energy changes.","emoji":"🧪","id":"b_reactions","title":"Chemical Reactions","questions":[{"q":"Which of these is a sign that a chemical reaction has taken place?","a":["Ice melting into water","A gas being produced with a color change","Sugar dissolving in tea","Water evaporating from a puddle"],"c":1},{"q":"In the equation 2H2 + O2 → 2H2O, what are H2 and O2 called?","a":["Reactants","Products","Catalysts","Solvents"],"c":0},{"q":"What type of reaction is iron combining with oxygen to form rust (iron oxide)?","a":["Decomposition","Neutralization","Combination (synthesis)","Displacement"],"c":2},{"q":"A reaction that releases heat to the surroundings is called:","a":["Endothermic","Reversible","Catalytic","Exothermic"],"c":3},{"q":"What is the pH of a neutral solution like pure water at 25°C?","a":["0","7","14","1"],"c":1},{"q":"When an acid reacts with a base, the products are:","a":["A salt and water","Hydrogen gas only","Carbon dioxide only","Two new acids"],"c":0},{"q":"Heating calcium carbonate breaks it into calcium oxide and carbon dioxide. What type of reaction is this?","a":["Synthesis","Combustion","Decomposition","Neutralization"],"c":2},{"q":"What does a catalyst do in a chemical reaction?","a":["Gets used up to make products","Speeds up the reaction without being consumed","Changes the products that form","Stops the reaction completely"],"c":1},{"q":"Why must a chemical equation be balanced?","a":["To make the reaction exothermic","Because products always weigh more than reactants","To make the reaction happen faster","Because atoms are conserved — none are created or destroyed"],"c":3},{"q":"In the reaction Zn + CuSO4 → ZnSO4 + Cu, what happens?","a":["Zinc displaces copper because zinc is more reactive","Copper displaces zinc because copper is more reactive","The two metals combine into an alloy","Sulfate decomposes into sulfur and oxygen"],"c":0}]},{"category":"Chemistry","desc":"Solids, liquids, gases, phase changes and particles.","emoji":"🧊","id":"b_states","title":"States of Matter","questions":[{"q":"Which state of matter has a fixed shape and a fixed volume?","a":["Gas","Liquid","Solid","Plasma"],"c":2},{"q":"What is the process called when a liquid changes into a gas?","a":["Evaporation","Condensation","Freezing","Melting"],"c":0},{"q":"In most substances, in which state of matter are the particles packed closest together?","a":["Gas","Liquid","Solid","They are equally spaced in all states"],"c":2},{"q":"What happens to water at 0 degrees Celsius when heat is removed?","a":["It boils","It freezes into ice","It evaporates","It turns into vapour"],"c":1},{"q":"Which change of state happens when water vapour touches a cold window and forms droplets?","a":["Melting","Sublimation","Evaporation","Condensation"],"c":3},{"q":"Why can a gas be compressed easily but a liquid cannot?","a":["Gas particles have large spaces between them","Gas particles are heavier","Liquid particles do not move","Gas particles are stuck together tightly"],"c":0},{"q":"Dry ice (solid carbon dioxide) turns directly into a gas without melting. What is this process called?","a":["Condensation","Sublimation","Deposition","Evaporation"],"c":1},{"q":"What happens to the movement of particles in a substance when it is heated?","a":["They stop moving","They move more slowly","They move faster","They shrink in size"],"c":2},{"q":"While a pure substance is melting, what happens to its temperature?","a":["It rises steadily","It falls steadily","It rises then falls","It stays constant"],"c":3},{"q":"Water boils at 100 degrees Celsius at sea level. What happens to its boiling point high on a mountain, where air pressure is lower?","a":["It is lower than 100 degrees Celsius","It is higher than 100 degrees Celsius","It stays exactly 100 degrees Celsius","Water cannot boil at high altitude"],"c":0}]},{"category":"Computer Science","desc":"Sorting, searching, data structures and efficiency.","emoji":"🧮","id":"b_algorithms","title":"Algorithms & Data","questions":[{"q":"What is an algorithm?","a":["A step-by-step set of instructions to solve a problem","A type of computer chip","A programming language","A file that stores pictures"],"c":0},{"q":"Which of these puts a list of numbers in order from smallest to largest?","a":["Searching","Compressing","Sorting","Encrypting"],"c":2},{"q":"Linear search finds an item in a list by doing what?","a":["Jumping straight to the middle of the list","Checking each item one by one from the start","Sorting the list first, then guessing","Checking only the last item"],"c":1},{"q":"Binary search only works correctly if the list is:","a":["Very short","Full of unique pictures","Stored on the internet","Already sorted"],"c":3},{"q":"A stack is a data structure where the item removed first is the one that was:","a":["Added last (Last In, First Out)","Added first (First In, First Out)","The largest value","Chosen at random"],"c":0},{"q":"A queue works like a line at a shop. Which rule does it follow?","a":["Last In, First Out","First In, First Out","Biggest item leaves first","Items never leave"],"c":1},{"q":"Bubble sort works by repeatedly doing what?","a":["Splitting the list in half again and again","Picking a random item and hoping it is in place","Comparing neighbouring items and swapping them if they are in the wrong order","Deleting the largest item until the list is empty"],"c":2},{"q":"With binary search, at most how many comparisons are needed to find an item in a sorted list of 1000 items?","a":["1000","500","100","About 10"],"c":3},{"q":"Which of these describes an algorithm whose running time grows fastest as the input size n gets large?","a":["O(n^2)","O(n)","O(log n)","O(1)"],"c":0},{"q":"Why is looking up a value by its key in a hash table usually very fast?","a":["The table checks every entry one by one","All values are stored in sorted order and searched from the end","The key is converted by a hash function directly into the location where the value is stored","The computer memorises every question it has been asked before"],"c":2}]},{"id":"b_proglogic","title":"Programming Logic","emoji":"💻","category":"Computer Science","desc":"Variables, loops, conditions, binary and debugging.","questions":[{"q":"In programming, what is a variable?","a":["A named container that stores a value","A type of computer screen","An error in the code","A picture in a program"],"c":0},{"q":"What does a loop do in a program?","a":["Deletes the program","Stops the computer","Repeats a block of instructions","Prints the code on paper"],"c":2},{"q":"An 'if' statement runs its code only when...","a":["the program has finished","its condition is true","the computer restarts","a loop has ended"],"c":1},{"q":"What is a 'bug' in programming?","a":["A tool for writing code","A fast part of the program","A file that stores data","A mistake that makes a program behave incorrectly"],"c":3},{"q":"Binary numbers use only which digits?","a":["0 and 1","1 and 2","0 through 9","0, 1 and 2"],"c":0},{"q":"After running: x = 5, then x = x + 3, what is the value of x?","a":["5","3","8","53"],"c":2},{"q":"How many times does this loop print? 'repeat 4 times: print(\"Hi\")'","a":["1","4","3","5"],"c":1},{"q":"What is an infinite loop?","a":["A loop that runs exactly once","A loop that counts backwards","A loop with no code inside","A loop whose stopping condition is never met, so it never ends"],"c":3},{"q":"What is the decimal value of the binary number 101?","a":["3","5","101","7"],"c":1},{"q":"A loop should print numbers 1 to 10 but stops at 9 because it uses 'while n < 10'. What kind of error is this?","a":["An off-by-one error","A hardware failure","A syntax error","A binary error"],"c":0}]}];
     </script>
 </body>
