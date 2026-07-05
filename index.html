@@ -16205,7 +16205,19 @@ function drawPeriodicTrends(ctx, canvas) {
         // Runs the user's code as __main__. Output streams live via setStdout/setStderr,
         // and input() is served synchronously (see runPython), so interactive programs work.
         const PY_WRAPPER = [
-            'import sys, traceback',
+            'import sys, traceback, builtins',
+            'try:',
+            '    import js as _js',
+            '    def _mop_input(prompt=""):',
+            '        if prompt:',
+            '            sys.stdout.write(str(prompt)); sys.stdout.flush()',
+            '        r = _js.mopPyInput(str(prompt))',
+            '        if r is None:',
+            '            raise SystemExit',
+            '        return r',
+            '    builtins.input = _mop_input',
+            'except Exception:',
+            '    pass',
             'try:',
             "    exec(user_code, {'__name__': '__main__'})",
             'except SystemExit:',
@@ -16213,6 +16225,16 @@ function drawPeriodicTrends(ctx, canvas) {
             'except Exception:',
             '    traceback.print_exc()'
         ].join('\n');
+
+        // Serves Python's input() synchronously: shows the program's real prompt, echoes the reply.
+        window.mopPyInput = function (promptText) {
+            const label = (promptText && String(promptText).trim()) || 'Program input:';
+            const v = window.prompt(label);
+            if (v === null) { appendPyOut('\n[stopped]\n', false); return null; }   // Cancel = clean stop (SystemExit)
+            appendPyOut(v + '\n', false);
+            pyPendingPrompt = '';
+            return v;
+        };
 
         let pyPendingPrompt = '';
         const _pyDec = (typeof TextDecoder !== 'undefined') ? new TextDecoder() : null;
@@ -16246,18 +16268,7 @@ function drawPeriodicTrends(ctx, canvas) {
                 const writer = isErr => (buf) => { appendPyOut(_pyDec ? _pyDec.decode(buf) : String(buf), isErr); return buf.length; };
                 py.setStdout({ write: writer(false) });
                 py.setStderr({ write: writer(true) });
-                // input(): flush already happened (streamed); ask the user synchronously and echo the reply.
-                py.setStdin({
-                    stdin: () => {
-                        const label = (pyPendingPrompt || '').trim() || 'Program input:';
-                        const v = window.prompt(label);
-                        if (v === null) return null;            // Cancel = end-of-input (EOFError)
-                        appendPyOut(v + '\n', false);
-                        pyPendingPrompt = '';
-                        return v + '\n';
-                    },
-                    autoEOF: false
-                });
+                // input() is served by window.mopPyInput (see PY_WRAPPER) — it gets the real prompt text.
                 out.innerHTML = '';
                 const t0 = performance.now();
                 py.globals.set('user_code', ed.value);
