@@ -1118,6 +1118,23 @@
         .ships-btn { border: none; border-radius: 12px; padding: 10px 18px; font-weight: 800; cursor: pointer; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; }
         .ships-btn.ghost { background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border-light); }
         .ships-src { margin: 14px auto 0; max-width: 100%; overflow: auto; background: #0d1117; color: #c9d1d9; border-radius: 12px; padding: 14px; font-family: ui-monospace, Consolas, monospace; font-size: 0.78em; line-height: 1.5; }
+
+        /* ===== GAME LOBBY ===== */
+        .lobby-wrap { max-width: 1080px; margin: 0 auto; animation: fadeInUp 0.35s ease both; }
+        .lobby-hero { border-radius: 22px; padding: 34px 30px; background: linear-gradient(135deg, #0ea5e9, #6366f1); color: #fff; position: relative; overflow: hidden; margin-bottom: 22px; }
+        .lobby-hero h2 { margin: 0 0 6px; font-size: 2em; letter-spacing: -0.5px; }
+        .lobby-hero p { margin: 0; opacity: 0.92; font-size: 1.02em; max-width: 640px; }
+        .lobby-back { margin-bottom: 14px; border: none; border-radius: 10px; padding: 8px 16px; font-weight: 800; cursor: pointer; background: var(--bg-light); color: var(--text-dark); }
+        .lobby-back:hover { filter: brightness(0.96); }
+        .lobby-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
+        .lobby-card { position: relative; border-radius: 18px; overflow: hidden; background: var(--bg-white); box-shadow: var(--shadow); display: flex; flex-direction: column; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease; border: 3px solid transparent; }
+        .lobby-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); border-color: #6366f1; }
+        .lobby-card-top { height: 100px; display: flex; align-items: center; justify-content: center; font-size: 2.8em; background: linear-gradient(135deg, #0ea5e9, #6366f1); color: #fff; }
+        .lobby-card-body { padding: 14px 16px 16px; }
+        .lobby-card-title { font-weight: 800; font-size: 1.08em; color: var(--text-dark); margin-bottom: 4px; }
+        .lobby-card-desc { font-size: 0.85em; color: var(--text-light); line-height: 1.4; margin-bottom: 10px; }
+        .lobby-card-stat { font-size: 0.8em; font-weight: 700; color: #6366f1; }
+        .lobby-card-play { display: block; width: 100%; margin-top: 10px; border: none; border-radius: 10px; padding: 9px; font-weight: 800; cursor: pointer; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; }
         .bc-ghost { position: fixed; z-index: 99999; pointer-events: none; color: #fff; font-weight: 700; font-size: 0.82em; padding: 7px 11px; border-radius: 7px; box-shadow: 0 8px 22px rgba(0,0,0,0.45); opacity: 0.93; transform: rotate(-2deg); white-space: nowrap; }
         body.bc-dragging, body.bc-dragging * { cursor: grabbing !important; user-select: none; }
         .bc-stage-wrap { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -2384,6 +2401,7 @@ if __name__ == "__main__":
             <button class="header-btn" id="themeBtn" onclick="toggleTheme()">🌙 Dark Mode</button>
             <button class="header-btn" id="soundBtn" onclick="toggleSound()">🔊 Sound On</button>
             <button class="header-btn" id="shareBtn" onclick="shareApp()" title="Share the whole Science Playground">🔗 Share</button>
+            <button class="header-btn" id="lobbyBtn" onclick="selectLobby()" title="Game Lobby — play Battleship and more">🕹️ Lobby</button>
             <button class="header-btn" id="aiBtn" onclick="openAiPanel()" title="Ask the AI tutor any science question (Google AI)">🤖 AI Tutor</button>
             <button class="header-btn" id="settingsBtn" onclick="openSettings()">⚙️ Settings</button>
         </div>
@@ -2454,6 +2472,9 @@ if __name__ == "__main__":
 
         <!-- QUIZ ARENA (play · compete · create) -->
         <div id="quizView" style="display:none;"></div>
+
+        <!-- GAME LOBBY (play · Battleship and more) -->
+        <div id="lobbyView" style="display:none;"></div>
     </div>
 
     <!-- SIMULATION FULLSCREEN VIEW -->
@@ -2765,6 +2786,7 @@ if __name__ == "__main__":
             workspaceOpen = false;
             if (window.QZ) QZ.leave();
             { const qv = document.getElementById('quizView'); if (qv) qv.style.display = 'none'; }
+            { const lv = document.getElementById('lobbyView'); if (lv) lv.style.display = 'none'; }
             document.getElementById('workspaceView').style.display = 'none';
             document.getElementById('topicGridView').style.display = '';
             // Click an active tile again to clear the filter and show all subjects
@@ -2777,6 +2799,7 @@ if __name__ == "__main__":
             SFX.play('click');
             if (window.QZ) QZ.leave();
             { const qv = document.getElementById('quizView'); if (qv) qv.style.display = 'none'; }
+            { const lv = document.getElementById('lobbyView'); if (lv) lv.style.display = 'none'; }
             workspaceOpen = !workspaceOpen;
             const wsView = document.getElementById('workspaceView');
             const gridView = document.getElementById('topicGridView');
@@ -3008,6 +3031,7 @@ if __name__ == "__main__":
             workspaceOpen = false;
             if (window.QZ) QZ.leave();
             { const qv = document.getElementById('quizView'); if (qv) qv.style.display = 'none'; }
+            { const lv = document.getElementById('lobbyView'); if (lv) lv.style.display = 'none'; }
             const wsV = document.getElementById('workspaceView'); if (wsV) wsV.style.display = 'none';
             const gv = document.getElementById('topicGridView'); if (gv) gv.style.display = '';
             if (q.trim()) activeCategory = null;
@@ -3021,6 +3045,9 @@ if __name__ == "__main__":
             currentSimulation = simulations.find(s => s.id === id);
             if (currentSimulation) recordRecent(id);
             if (!currentSimulation) return;
+
+            // Avoid a duplicate #shipsView if the Lobby's Battleship board is still mounted behind this modal.
+            { const lg = document.getElementById('lobbyGame'); if (lg && lg.querySelector('#shipsView')) lg.innerHTML = ''; }
 
             SFX.play('open');
             stopAudiobook();
@@ -8760,15 +8787,24 @@ function drawCaesarCipher(ctx, c){
             if (t === 'X' || t === 'O') return;
             if (t === 'S') { SHIPS.enemy[r][c] = 'X'; SHIPS.playerHits++; SHIPS.msg = '💥 Direct hit!'; if (window.SFX) SFX.tone(880, 0.12, 'square', 0.09); }
             else { SHIPS.enemy[r][c] = 'O'; SHIPS.msg = '💦 Splash — you missed.'; if (window.SFX) SFX.tone(300, 0.1, 'sine', 0.06); }
-            if (SHIPS.playerHits >= SHIPS_TOTAL) { SHIPS.over = true; SHIPS.win = true; SHIPS.msg = '🏆 Victory! You sank the entire enemy fleet!'; if (window.SFX) SFX.play('success'); shipsRender(); return; }
+            if (SHIPS.playerHits >= SHIPS_TOTAL) { SHIPS.over = true; SHIPS.win = true; SHIPS.msg = '🏆 Victory! You sank the entire enemy fleet!'; if (window.SFX) SFX.play('success'); shipsRecordResult(true); shipsRender(); return; }
             // --- AI turn: fire at a random un-targeted cell (faithful to spec) ---
             let er, ec, guard = 0;
             do { er = (Math.random() * SHIPS_GRID) | 0; ec = (Math.random() * SHIPS_GRID) | 0; } while (SHIPS.enemyGuesses.has(er + ',' + ec) && guard++ < 500);
             SHIPS.enemyGuesses.add(er + ',' + ec);
             if (SHIPS.player[er][ec] === 'S') { SHIPS.player[er][ec] = 'X'; SHIPS.enemyHits++; SHIPS.msg += '  🚨 Enemy hit your ship at (' + er + ',' + ec + ')!'; }
             else if (SHIPS.player[er][ec] === '~') { SHIPS.player[er][ec] = 'O'; SHIPS.msg += '  Enemy fired at (' + er + ',' + ec + ') — miss.'; }
-            if (SHIPS.enemyHits >= SHIPS_TOTAL) { SHIPS.over = true; SHIPS.win = false; SHIPS.msg = '💀 Defeat — all your ships have been sunk.'; if (window.SFX) SFX.play('close'); }
+            if (SHIPS.enemyHits >= SHIPS_TOTAL) { SHIPS.over = true; SHIPS.win = false; SHIPS.msg = '💀 Defeat — all your ships have been sunk.'; if (window.SFX) SFX.play('close'); shipsRecordResult(false); }
             shipsRender();
+        }
+        function shipsStats() { try { return JSON.parse(localStorage.getItem('shipsStats') || '{}'); } catch (e) { return {}; } }
+        function shipsRecordResult(won) {
+            try {
+                const s = shipsStats();
+                s.wins = (s.wins || 0) + (won ? 1 : 0);
+                s.losses = (s.losses || 0) + (won ? 0 : 1);
+                localStorage.setItem('shipsStats', JSON.stringify(s));
+            } catch (e) { }
         }
         function shipsRestart() { shipsNewGame(); if (window.SFX) SFX.play('click'); shipsRender(); }
         function shipsToggleSrc() { const s = document.getElementById('shipsSrc'); if (s) s.style.display = s.style.display === 'none' ? 'block' : 'none'; }
@@ -8776,6 +8812,75 @@ function drawCaesarCipher(ctx, c){
             shipsNewGame();
             container.innerHTML = '<div class="ships-wrap" id="shipsView"></div>';
             shipsRender();
+        }
+
+        // ===== GAME LOBBY (hub for playable games; Battleship today, more later) =====
+        const LOBBY_GAMES = [
+            { id: 'ships', icon: '🚢', title: 'Battleship', desc: '10×10 naval strategy — sink the enemy fleet before they sink yours.' }
+        ];
+        function selectLobby() {
+            SFX.play('click');
+            if (window.QZ) QZ.leave();
+            workspaceOpen = false;
+            activeCategory = null;
+            document.getElementById('workspaceView').style.display = 'none';
+            document.getElementById('topicGridView').style.display = 'none';
+            { const qv = document.getElementById('quizView'); if (qv) qv.style.display = 'none'; }
+            const lv = document.getElementById('lobbyView');
+            lv.style.display = 'block';
+            renderCategoryTiles();
+            renderLobbyHub();
+        }
+        function renderLobbyHub() {
+            const lv = document.getElementById('lobbyView');
+            if (!lv) return;
+            const stats = shipsStats();
+            const cards = LOBBY_GAMES.map(g => {
+                const s = g.id === 'ships' ? stats : {};
+                const stat = (s.wins || s.losses) ? ('🏆 ' + (s.wins || 0) + ' win' + ((s.wins || 0) === 1 ? '' : 's') + ' · ' + (s.losses || 0) + ' loss' + ((s.losses || 0) === 1 ? '' : 'es')) : 'Not played yet';
+                return '<div class="lobby-card" onclick="lobbyOpenGame(\'' + g.id + '\')">' +
+                    '<div class="lobby-card-top">' + g.icon + '</div>' +
+                    '<div class="lobby-card-body"><div class="lobby-card-title">' + g.title + '</div>' +
+                    '<div class="lobby-card-desc">' + g.desc + '</div>' +
+                    '<div class="lobby-card-stat">' + stat + '</div>' +
+                    '<button class="lobby-card-play">▶ Play</button></div></div>';
+            }).join('');
+            lv.innerHTML =
+                '<div class="lobby-wrap">' +
+                    '<div class="lobby-hero"><h2>🕹️ Game Lobby</h2><p>Take a break and play — starting with Battleship, with more games on the way.</p></div>' +
+                    '<div id="lobbyHub"><div class="lobby-grid">' + cards + '</div></div>' +
+                    '<div id="lobbyGame" style="display:none"></div>' +
+                '</div>';
+        }
+        function lobbyOpenGame(id) {
+            SFX.play('click');
+            const lv = document.getElementById('lobbyView');
+            if (!lv) return;
+            const hub = document.getElementById('lobbyHub');
+            const game = document.getElementById('lobbyGame');
+            let back = lv.querySelector('.lobby-back');
+            if (!back) {
+                back = document.createElement('button');
+                back.className = 'lobby-back';
+                back.textContent = '← Game Lobby';
+                back.onclick = lobbyShowHub;
+                lv.querySelector('.lobby-wrap').insertBefore(back, hub);
+            }
+            back.style.display = 'inline-block';
+            hub.style.display = 'none';
+            game.style.display = 'block';
+            game.innerHTML = '';
+            if (id === 'ships') renderShips(game);
+        }
+        function lobbyShowHub() {
+            SFX.play('click');
+            const lv = document.getElementById('lobbyView');
+            if (!lv) return;
+            const game = document.getElementById('lobbyGame');
+            game.innerHTML = '';         // drop the mounted game so its DOM id (e.g. #shipsView) doesn't linger
+            game.style.display = 'none';
+            const back = lv.querySelector('.lobby-back'); if (back) back.style.display = 'none';
+            renderLobbyHub();            // rebuild the hub so win/loss stats reflect the game just played
         }
 
         function renderTugStrategy(container) { TUG = null; tugRenderSetup(container); }
@@ -28039,6 +28144,7 @@ window.SCENES_3D['binary-search'] = {
     if (typeof workspaceOpen !== 'undefined') workspaceOpen = false;
     var wv = document.getElementById('workspaceView'); if (wv) wv.style.display = 'none';
     var gv = document.getElementById('topicGridView'); if (gv) gv.style.display = 'none';
+    var lv = document.getElementById('lobbyView'); if (lv) lv.style.display = 'none';
     if (typeof activeCategory !== 'undefined') activeCategory = null;
     var qv = document.getElementById('quizView'); if (qv) qv.style.display = 'block';
     if (typeof renderCategoryTiles === 'function') renderCategoryTiles();
