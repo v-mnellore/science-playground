@@ -1091,6 +1091,33 @@
         .bc-btns { margin-left: 8px; display: flex; gap: 3px; opacity: 0; transition: opacity 0.15s ease; }
         .bc-block:hover .bc-btns { opacity: 1; }
         .bc-indicator { height: 5px; background: #ffd400; border-radius: 3px; margin: 2px 0; box-shadow: 0 0 7px rgba(255,212,0,0.85); }
+        /* ===== Battleship (Ships) ===== */
+        .ships-wrap { max-width: 900px; margin: 0 auto; }
+        .ships-status { text-align: center; font-weight: 800; font-size: 1.05em; padding: 12px 14px; border-radius: 12px; background: var(--bg-light); color: var(--text-dark); margin-bottom: 16px; min-height: 22px; }
+        .ships-status.win { background: rgba(38,137,12,0.16); color: #1a7a2e; }
+        .ships-status.lose { background: rgba(226,27,60,0.16); color: #b02a2a; }
+        body.dark-theme .ships-status.win { color: #7ee29a; } body.dark-theme .ships-status.lose { color: #ff9d9d; }
+        .ships-boards { display: flex; gap: 26px; flex-wrap: wrap; justify-content: center; }
+        .ships-side-h { font-weight: 800; margin-bottom: 8px; color: var(--text-dark); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .ships-count { font-size: 0.72em; font-weight: 600; color: var(--text-light); }
+        .ships-grid { display: grid; grid-template-columns: 22px repeat(10, 1fr); gap: 2px; width: min(380px, 42vw); }
+        .ships-corner, .ships-hdr { font-size: 0.62em; font-weight: 700; color: var(--text-light); display: flex; align-items: center; justify-content: center; }
+        .ships-cell { aspect-ratio: 1; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 0.8em; background: #cfe4f5; transition: background 0.12s ease, transform 0.08s ease; }
+        body.dark-theme .ships-cell { background: #22344a; }
+        .ships-cell.water { background: #cfe4f5; } body.dark-theme .ships-cell.water { background: #223349; }
+        .ships-cell.ship { background: #5b6472; }
+        .ships-cell.hit { background: #e23b3b; }
+        .ships-cell.miss { background: #9fb3c8; color: #fff; }
+        .ships-grid.radar .ships-cell.live { cursor: crosshair; }
+        .ships-grid.radar .ships-cell.live:hover { background: #f5b50a; transform: scale(1.08); }
+        .ships-legend { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin: 16px 0 6px; font-size: 0.82em; color: var(--text-light); }
+        .ships-legend span { display: inline-flex; align-items: center; gap: 6px; }
+        .ships-sw { width: 15px; height: 15px; border-radius: 4px; display: inline-block; }
+        .ships-sw.ship { background: #5b6472; } .ships-sw.hit { background: #e23b3b; } .ships-sw.miss { background: #9fb3c8; } .ships-sw.water { background: #cfe4f5; }
+        .ships-actions { display: flex; gap: 10px; justify-content: center; margin-top: 12px; flex-wrap: wrap; }
+        .ships-btn { border: none; border-radius: 12px; padding: 10px 18px; font-weight: 800; cursor: pointer; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; }
+        .ships-btn.ghost { background: var(--bg-light); color: var(--text-dark); border: 2px solid var(--border-light); }
+        .ships-src { margin: 14px auto 0; max-width: 100%; overflow: auto; background: #0d1117; color: #c9d1d9; border-radius: 12px; padding: 14px; font-family: ui-monospace, Consolas, monospace; font-size: 0.78em; line-height: 1.5; }
         .bc-ghost { position: fixed; z-index: 99999; pointer-events: none; color: #fff; font-weight: 700; font-size: 0.82em; padding: 7px 11px; border-radius: 7px; box-shadow: 0 8px 22px rgba(0,0,0,0.45); opacity: 0.93; transform: rotate(-2deg); white-space: nowrap; }
         body.bc-dragging, body.bc-dragging * { cursor: grabbing !important; user-select: none; }
         .bc-stage-wrap { width: 300px; flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -2205,6 +2232,149 @@
     </style>
 </head>
 <body>
+<script type="text/plain" id="pyEgBattleship">
+import random
+
+# Game configuration constants
+GRID_SIZE = 10
+SHIPS = {
+    "Carrier": 5,
+    "Battleship": 4,
+    "Destroyer": 3,
+    "Submarine": 3,
+    "Patrol Boat": 2
+}
+
+def create_board():
+    """Generates a clean 10x10 grid filled with water '~' symbols."""
+    return [["~" for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]
+
+def print_board(board, hide_ships=False):
+    """Displays the current board state cleanly in the console terminal."""
+    print("\n   " + " ".join(str(i) for i in range(GRID_SIZE)))
+    for idx, row in enumerate(board):
+        display_row = []
+        for cell in row:
+            # Hide unhit enemy ships ('S') if requested
+            if hide_ships and cell == "S":
+                display_row.append("~")
+            else:
+                display_row.append(cell)
+        print(f"{idx:2d} " + " ".join(display_row))
+    print()
+
+def can_place_ship(board, row, col, size, orientation):
+    """Validates if a ship fits inside the grid boundaries without overlapping."""
+    if orientation == "H":
+        if col + size > GRID_SIZE:
+            return False
+        return all(board[row][col + i] == "~" for i in range(size))
+    else:  # Vertical orientation
+        if row + size > GRID_SIZE:
+            return False
+        return all(board[row + i][col] == "~" for i in range(size))
+
+def place_ships_randomly(board):
+    """Automatically distributes all standard ships randomly onto the board."""
+    for ship_name, size in SHIPS.items():
+        placed = False
+        while not placed:
+            orientation = random.choice(["H", "V"])
+            row = random.randint(0, GRID_SIZE - 1)
+            col = random.randint(0, GRID_SIZE - 1)
+
+            if can_place_ship(board, row, col, size, orientation):
+                if orientation == "H":
+                    for i in range(size):
+                        board[row][col + i] = "S"
+                else:
+                    for i in range(size):
+                        board[row + i][col] = "S"
+                placed = True
+
+def get_player_guess():
+    """Handles user coordinate inputs safely with input error validation."""
+    while True:
+        try:
+            guess = input("Enter target row and column separated by a space (e.g., 3 4): ")
+            row, col = map(int, guess.split())
+            if 0 <= row < GRID_SIZE and 0 <= col < GRID_SIZE:
+                return row, col
+            print("Out of bounds! Choose numbers between 0 and 9.")
+        except ValueError:
+            print("Invalid format! Please enter two numbers separated by a space.")
+
+def play_game():
+    """Manages the main execution engine and turn tracker of the match."""
+    print("=== WELCOME TO THE PYTHON BATTLESHIP SIMULATOR ===")
+    print("Legend: ~ = Water | S = Your Ship | X = Hit | O = Miss\n")
+
+    # Initialize separate combat fields
+    player_board = create_board()
+    enemy_board = create_board()
+
+    # Auto-populate fleets
+    place_ships_randomly(player_board)
+    place_ships_randomly(enemy_board)
+
+    # Calculate initial win-conditions
+    total_ship_cells = sum(SHIPS.values())
+    player_hits = 0
+    enemy_hits = 0
+
+    # Track coordinates the AI has already targeted
+    enemy_past_guesses = set()
+
+    while player_hits < total_ship_cells and enemy_hits < total_ship_cells:
+        # --- PLAYER TURN ---
+        print("-" * 35)
+        print("YOUR RADAR (Enemy Fleet Status):")
+        print_board(enemy_board, hide_ships=True)
+
+        print("YOUR FLEET MAP:")
+        print_board(player_board, hide_ships=False)
+
+        print("Your Turn to Attack!")
+        p_row, p_col = get_player_guess()
+
+        if enemy_board[p_row][p_col] == "S":
+            print("\n💥 DIRECT HIT! You struck an enemy ship!")
+            enemy_board[p_row][p_col] = "X"
+            player_hits += 1
+        elif enemy_board[p_row][p_col] in ["X", "O"]:
+            print("\nYou already fired there! You wasted a turn.")
+        else:
+            print("\n💦 Splash... You missed.")
+            enemy_board[p_row][p_col] = "O"
+
+        if player_hits == total_ship_cells:
+            print("\n🏆 CONGRATULATIONS! You sank the entire enemy fleet! Victory is yours.")
+            break
+
+        # --- AI ENEMY TURN ---
+        while True:
+            e_row = random.randint(0, GRID_SIZE - 1)
+            e_col = random.randint(0, GRID_SIZE - 1)
+            if (e_row, e_col) not in enemy_past_guesses:
+                enemy_past_guesses.add((e_row, e_col))
+                break
+
+        print(f"Enemy fires at coordinates: ({e_row}, {e_col})")
+        if player_board[e_row][e_col] == "S":
+            print("🚨 ALERT! The enemy hit one of your ships!")
+            player_board[e_row][e_col] = "X"
+            enemy_hits += 1
+        else:
+            print("Safe! The enemy missed.")
+            player_board[e_row][e_col] = "O"
+
+        if enemy_hits == total_ship_cells:
+            print("\n💀 DEFEAT! All your ships have capsized. Game over.")
+            break
+
+if __name__ == "__main__":
+    play_game()
+</script>
     <!-- HEADER -->
     <div class="header">
         <h1>🔬 Science Playground</h1>
@@ -2368,6 +2538,7 @@
             // PHYSICS
             { id: 'calculator', category: 'Physics', name: 'Scientific Calculator', icon: '🧮', description: 'Scientific calculator with physics constants' },
             { id: 'pendulum', category: 'Physics', name: 'Pendulum Motion', icon: '🎯', description: 'Harmonic oscillation - swinging motion' },
+            { id: 'ships', category: 'Physics', name: 'Battleship (Ships)', icon: '🚢', description: '10×10 naval strategy — sink the enemy fleet before they sink yours' },
             { id: 'spring', category: 'Physics', name: 'Spring Oscillation', icon: '🔄', description: 'Hooke\'s Law - bouncing mass' },
             { id: 'projectile', category: 'Physics', name: 'Projectile Motion', icon: '🚀', description: 'Parabolic trajectory - launch angle control' },
             { id: 'free-fall', category: 'Physics', name: 'Free Fall', icon: '⬇️', description: 'Accelerating object - gravity simulation' },
@@ -2843,7 +3014,7 @@
             renderTopicGrid();
         }
 
-        const CUSTOM_VIEWS = { 'paper-planes': renderPaperPlanes, 'calculator': renderCalculator, 'python-ide': renderPythonIde, 'microscope': renderMicroscope, 'periodic-3d': renderPeriodic3D, 'respiration-full': renderRespirationFull, 'aerobic-respiration': renderAerobicRespiration, 'flowchart': renderFlowchart, 'block-code': renderBlockCode, 'tug-of-war': renderTugStrategy };
+        const CUSTOM_VIEWS = { 'paper-planes': renderPaperPlanes, 'calculator': renderCalculator, 'python-ide': renderPythonIde, 'microscope': renderMicroscope, 'periodic-3d': renderPeriodic3D, 'respiration-full': renderRespirationFull, 'aerobic-respiration': renderAerobicRespiration, 'flowchart': renderFlowchart, 'block-code': renderBlockCode, 'tug-of-war': renderTugStrategy, 'ships': renderShips };
 
         function openSimulation(id) {
             currentSimulation = simulations.find(s => s.id === id);
@@ -8491,6 +8662,103 @@ function drawCaesarCipher(ctx, c){
         function tugEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
         function tugClamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
         function tugSetTxt(id, t) { var e = document.getElementById(id); if (e) e.textContent = t; }
+
+        // ===== BATTLESHIP ("Ships") — playable port of the Python spec =====
+        // Faithful to the provided game: 10x10 grid, 5 ships (17 cells), random placement,
+        // hit/miss, random-fire AI, first to sink all 17 enemy cells wins.
+        const SHIPS_GRID = 10;
+        const SHIPS_FLEET = { 'Carrier': 5, 'Battleship': 4, 'Destroyer': 3, 'Submarine': 3, 'Patrol Boat': 2 };
+        const SHIPS_TOTAL = Object.values(SHIPS_FLEET).reduce((a, b) => a + b, 0); // 17
+        const SHIPS_PY_SRC = "import random\n\nGRID_SIZE = 10\nSHIPS = {\n    \"Carrier\": 5,\n    \"Battleship\": 4,\n    \"Destroyer\": 3,\n    \"Submarine\": 3,\n    \"Patrol Boat\": 2\n}\n\ndef create_board():\n    return [[\"~\" for _ in range(GRID_SIZE)] for _ in range(GRID_SIZE)]\n\ndef can_place_ship(board, row, col, size, orientation):\n    if orientation == \"H\":\n        if col + size > GRID_SIZE:\n            return False\n        return all(board[row][col + i] == \"~\" for i in range(size))\n    else:\n        if row + size > GRID_SIZE:\n            return False\n        return all(board[row + i][col] == \"~\" for i in range(size))\n\ndef place_ships_randomly(board):\n    for ship_name, size in SHIPS.items():\n        placed = False\n        while not placed:\n            orientation = random.choice([\"H\", \"V\"])\n            row = random.randint(0, GRID_SIZE - 1)\n            col = random.randint(0, GRID_SIZE - 1)\n            if can_place_ship(board, row, col, size, orientation):\n                if orientation == \"H\":\n                    for i in range(size):\n                        board[row][col + i] = \"S\"\n                else:\n                    for i in range(size):\n                        board[row + i][col] = \"S\"\n                placed = True\n\n# ...full turn loop as provided by the player...";
+
+        let SHIPS = null;
+        function shipsNewGame() {
+            const mk = () => Array.from({ length: SHIPS_GRID }, () => Array(SHIPS_GRID).fill('~'));
+            const canPlace = (b, r, c, size, o) => {
+                if (o === 'H') { if (c + size > SHIPS_GRID) return false; for (let i = 0; i < size; i++) if (b[r][c + i] !== '~') return false; }
+                else { if (r + size > SHIPS_GRID) return false; for (let i = 0; i < size; i++) if (b[r + i][c] !== '~') return false; }
+                return true;
+            };
+            const place = (b) => {
+                for (const size of Object.values(SHIPS_FLEET)) {
+                    let placed = false, guard = 0;
+                    while (!placed && guard++ < 2000) {
+                        const o = Math.random() < 0.5 ? 'H' : 'V';
+                        const r = (Math.random() * SHIPS_GRID) | 0, c = (Math.random() * SHIPS_GRID) | 0;
+                        if (canPlace(b, r, c, size, o)) {
+                            for (let i = 0; i < size; i++) { if (o === 'H') b[r][c + i] = 'S'; else b[r + i][c] = 'S'; }
+                            placed = true;
+                        }
+                    }
+                }
+            };
+            const player = mk(), enemy = mk();
+            place(player); place(enemy);
+            SHIPS = { player, enemy, playerHits: 0, enemyHits: 0, enemyGuesses: new Set(), over: false, msg: 'Your turn — fire on the enemy radar!' };
+        }
+        function shipsCell(v, hide) {
+            if (v === 'X') return { t: '💥', c: 'hit' };
+            if (v === 'O') return { t: '•', c: 'miss' };
+            if (v === 'S') return hide ? { t: '', c: 'water' } : { t: '', c: 'ship' };
+            return { t: '', c: 'water' };
+        }
+        function shipsBoardHTML(board, hide, radar) {
+            let h = '<div class="ships-grid' + (radar ? ' radar' : '') + '">';
+            h += '<div class="ships-corner"></div>';
+            for (let c = 0; c < SHIPS_GRID; c++) h += '<div class="ships-hdr">' + c + '</div>';
+            for (let r = 0; r < SHIPS_GRID; r++) {
+                h += '<div class="ships-hdr">' + r + '</div>';
+                for (let c = 0; c < SHIPS_GRID; c++) {
+                    const cell = shipsCell(board[r][c], hide);
+                    const clickable = radar && !SHIPS.over && board[r][c] !== 'X' && board[r][c] !== 'O';
+                    h += '<div class="ships-cell ' + cell.c + (clickable ? ' live' : '') + '"' +
+                        (clickable ? ' onclick="shipsFire(' + r + ',' + c + ')"' : '') + '>' + cell.t + '</div>';
+                }
+            }
+            return h + '</div>';
+        }
+        function shipsRender() {
+            const box = document.getElementById('shipsView');
+            if (!box) return;
+            const remainEnemy = SHIPS_TOTAL - SHIPS.playerHits, remainYou = SHIPS_TOTAL - SHIPS.enemyHits;
+            box.innerHTML =
+                '<div class="ships-status ' + (SHIPS.over ? (SHIPS.win ? 'win' : 'lose') : '') + '" id="shipsMsg">' + SHIPS.msg + '</div>' +
+                '<div class="ships-boards">' +
+                    '<div class="ships-side"><div class="ships-side-h">🎯 Enemy radar <span class="ships-count">' + remainEnemy + ' hits to win</span></div>' +
+                        shipsBoardHTML(SHIPS.enemy, true, true) + '</div>' +
+                    '<div class="ships-side"><div class="ships-side-h">⚓ Your fleet <span class="ships-count">' + remainYou + ' cells left</span></div>' +
+                        shipsBoardHTML(SHIPS.player, false, false) + '</div>' +
+                '</div>' +
+                '<div class="ships-legend"><span><i class="ships-sw ship"></i> ship</span><span><i class="ships-sw hit"></i> hit</span><span><i class="ships-sw miss"></i> miss</span><span><i class="ships-sw water"></i> water</span></div>' +
+                '<div class="ships-actions"><button class="ships-btn" onclick="shipsRestart()">🔄 New game</button>' +
+                    '<button class="ships-btn ghost" onclick="shipsToggleSrc()">🐍 View Python source</button></div>' +
+                '<pre class="ships-src" id="shipsSrc" style="display:none"></pre>';
+            const src = document.getElementById('shipsSrc');
+            if (src) src.textContent = SHIPS_PY_SRC;
+        }
+        function shipsFire(r, c) {
+            if (!SHIPS || SHIPS.over) return;
+            const t = SHIPS.enemy[r][c];
+            if (t === 'X' || t === 'O') return;
+            if (t === 'S') { SHIPS.enemy[r][c] = 'X'; SHIPS.playerHits++; SHIPS.msg = '💥 Direct hit!'; if (window.SFX) SFX.tone(880, 0.12, 'square', 0.09); }
+            else { SHIPS.enemy[r][c] = 'O'; SHIPS.msg = '💦 Splash — you missed.'; if (window.SFX) SFX.tone(300, 0.1, 'sine', 0.06); }
+            if (SHIPS.playerHits >= SHIPS_TOTAL) { SHIPS.over = true; SHIPS.win = true; SHIPS.msg = '🏆 Victory! You sank the entire enemy fleet!'; if (window.SFX) SFX.play('success'); shipsRender(); return; }
+            // --- AI turn: fire at a random un-targeted cell (faithful to spec) ---
+            let er, ec, guard = 0;
+            do { er = (Math.random() * SHIPS_GRID) | 0; ec = (Math.random() * SHIPS_GRID) | 0; } while (SHIPS.enemyGuesses.has(er + ',' + ec) && guard++ < 500);
+            SHIPS.enemyGuesses.add(er + ',' + ec);
+            if (SHIPS.player[er][ec] === 'S') { SHIPS.player[er][ec] = 'X'; SHIPS.enemyHits++; SHIPS.msg += '  🚨 Enemy hit your ship at (' + er + ',' + ec + ')!'; }
+            else if (SHIPS.player[er][ec] === '~') { SHIPS.player[er][ec] = 'O'; SHIPS.msg += '  Enemy fired at (' + er + ',' + ec + ') — miss.'; }
+            if (SHIPS.enemyHits >= SHIPS_TOTAL) { SHIPS.over = true; SHIPS.win = false; SHIPS.msg = '💀 Defeat — all your ships have been sunk.'; if (window.SFX) SFX.play('close'); }
+            shipsRender();
+        }
+        function shipsRestart() { shipsNewGame(); if (window.SFX) SFX.play('click'); shipsRender(); }
+        function shipsToggleSrc() { const s = document.getElementById('shipsSrc'); if (s) s.style.display = s.style.display === 'none' ? 'block' : 'none'; }
+        function renderShips(container) {
+            shipsNewGame();
+            container.innerHTML = '<div class="ships-wrap" id="shipsView"></div>';
+            shipsRender();
+        }
 
         function renderTugStrategy(container) { TUG = null; tugRenderSetup(container); }
         function tugRenderSetup(container) {
@@ -15879,9 +16147,11 @@ function drawPeriodicTrends(ctx, canvas) {
             list: 'nums = [5, 3, 8, 1, 9, 2]\nprint("original:", nums)\nprint("sorted:  ", sorted(nums))\nprint("max:", max(nums), "min:", min(nums))\nprint("sum:", sum(nums))'
         };
 
+        const PY_EX_LABEL = { hello: 'Hello', math: 'Math', loop: 'Loops', fib: 'Fibonacci', prime: 'Primes', list: 'Lists', battleship: '🚢 Battleship' };
         function renderPythonIde(container) {
+            if (!PY_EXAMPLES.battleship) { const el = document.getElementById('pyEgBattleship'); if (el) PY_EXAMPLES.battleship = el.textContent.replace(/^\s*\n/, '').replace(/\s+$/, '') + '\n'; }
             const exampleBtns = Object.keys(PY_EXAMPLES).map(k =>
-                `<button class="py-example-btn" onclick="loadPyExample('${k}')">${k.charAt(0).toUpperCase() + k.slice(1)}</button>`).join('');
+                `<button class="py-example-btn" onclick="loadPyExample('${k}')">${PY_EX_LABEL[k] || (k.charAt(0).toUpperCase() + k.slice(1))}</button>`).join('');
             container.innerHTML = `
                 <div class="py-wrap">
                     <div class="py-toolbar">
@@ -15932,19 +16202,34 @@ function drawPeriodicTrends(ctx, canvas) {
             return pyodideLoadPromise;
         }
 
+        // Runs the user's code as __main__. Output streams live via setStdout/setStderr,
+        // and input() is served synchronously (see runPython), so interactive programs work.
         const PY_WRAPPER = [
-            'import sys, io, traceback',
-            '_buf = io.StringIO()',
-            '_old_out, _old_err = sys.stdout, sys.stderr',
-            'sys.stdout = _buf; sys.stderr = _buf',
+            'import sys, traceback',
             'try:',
             "    exec(user_code, {'__name__': '__main__'})",
+            'except SystemExit:',
+            '    pass',
             'except Exception:',
-            '    traceback.print_exc()',
-            'finally:',
-            '    sys.stdout = _old_out; sys.stderr = _old_err',
-            '_buf.getvalue()'
+            '    traceback.print_exc()'
         ].join('\n');
+
+        let pyPendingPrompt = '';
+        const _pyDec = (typeof TextDecoder !== 'undefined') ? new TextDecoder() : null;
+        function appendPyOut(text, isErr) {
+            if (!text) return;
+            const out = document.getElementById('pyOutput'); if (!out) return;
+            let pre = out.querySelector('.py-stream');
+            if (!pre) { out.innerHTML = ''; pre = document.createElement('div'); pre.className = 'py-stream'; out.appendChild(pre); }
+            const span = document.createElement('span');
+            if (isErr) span.className = 'err';
+            span.textContent = text;
+            pre.appendChild(span);
+            // Remember any text written since the last newline — it's the label for an input() prompt.
+            const nl = text.lastIndexOf('\n');
+            pyPendingPrompt = (nl === -1) ? (pyPendingPrompt + text) : text.slice(nl + 1);
+            out.scrollTop = out.scrollHeight;
+        }
 
         async function runPython() {
             const ed = document.getElementById('pyEditor');
@@ -15953,28 +16238,40 @@ function drawPeriodicTrends(ctx, canvas) {
             if (!ed || !out) return;
             runBtn.disabled = true;
             out.innerHTML = '<span class="muted">Working…</span>';
+            pyPendingPrompt = '';
             try {
                 const py = await ensurePyodide();
                 setPyStatus('Running…');
+                // Stream every write (including prompts with no trailing newline) straight to the panel.
+                const writer = isErr => (buf) => { appendPyOut(_pyDec ? _pyDec.decode(buf) : String(buf), isErr); return buf.length; };
+                py.setStdout({ write: writer(false) });
+                py.setStderr({ write: writer(true) });
+                // input(): flush already happened (streamed); ask the user synchronously and echo the reply.
+                py.setStdin({
+                    stdin: () => {
+                        const label = (pyPendingPrompt || '').trim() || 'Program input:';
+                        const v = window.prompt(label);
+                        if (v === null) return null;            // Cancel = end-of-input (EOFError)
+                        appendPyOut(v + '\n', false);
+                        pyPendingPrompt = '';
+                        return v + '\n';
+                    },
+                    autoEOF: false
+                });
+                out.innerHTML = '';
                 const t0 = performance.now();
                 py.globals.set('user_code', ed.value);
-                const result = await py.runPythonAsync(PY_WRAPPER);
+                await py.runPythonAsync(PY_WRAPPER);
                 const ms = (performance.now() - t0).toFixed(0);
-                const text = (result || '').toString();
-                out.innerHTML = '';
-                const body = document.createElement('div');
-                if (!text.trim()) { body.className = 'muted'; body.textContent = '(no output)'; }
-                else if (text.includes('Traceback (most recent call last)')) { body.className = 'err'; body.textContent = text; }
-                else { body.textContent = text; }
-                out.appendChild(body);
+                if (!out.querySelector('.py-stream')) { const b = document.createElement('div'); b.className = 'muted'; b.textContent = '(no output)'; out.appendChild(b); }
+                const hadErr = !!out.querySelector('.py-stream .err');
                 const fin = document.createElement('div');
                 fin.className = 'ok';
                 fin.textContent = '✓ finished in ' + ms + ' ms';
                 out.appendChild(fin);
                 setPyStatus('Done');
-                SFX.play(text.includes('Traceback (most recent call last)') ? 'error' : 'success');
+                SFX.play(hadErr ? 'error' : 'success');
             } catch (e) {
-                out.innerHTML = '';
                 const err = document.createElement('div');
                 err.className = 'err';
                 err.textContent = (e && e.message) ? e.message : String(e);
