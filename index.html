@@ -1047,20 +1047,26 @@
         .bc-wrap { display: flex; gap: 10px; height: 100%; width: 100%; min-height: 460px; }
         .bc-palette { width: 158px; flex-shrink: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding-right: 4px; }
         .bc-cat { font-size: 0.68em; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-light); margin-top: 8px; }
-        .bc-pal-btn { text-align: left; border: none; border-radius: 8px; padding: 7px 9px; color: #fff; font-weight: 600; font-size: 0.76em; cursor: pointer; line-height: 1.2; }
-        .bc-pal-btn:hover { filter: brightness(1.1); }
+        .bc-palette { --bc-bg: var(--bg-white); }
+        .bc-pal-btn { position: relative; text-align: left; border: 1px solid rgba(0,0,0,0.25); border-radius: 4px; padding: 7px 10px 8px; color: #fff; font-weight: 500; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 0.76em; cursor: pointer; line-height: 1.2; margin: 3px 0 2px; width: fit-content; max-width: 100%; }
+        .bc-pal-btn::before { content: ''; position: absolute; top: -1px; left: 10px; width: 20px; height: 4px; background: var(--bc-bg, #fff); border-radius: 0 0 4px 4px; }
+        .bc-pal-btn::after { content: ''; position: absolute; bottom: -5px; left: 10px; width: 20px; height: 4px; background: inherit; border: 1px solid rgba(0,0,0,0.25); border-top: none; border-radius: 0 0 4px 4px; z-index: 1; }
+        .bc-pal-btn:hover { filter: brightness(1.08); }
         .bc-mid { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
         .bc-toolbar { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
         .bc-open { font-size: 0.76em; color: var(--text-light); }
-        .bc-script { flex: 1; overflow: auto; background: var(--bg-light); border: 2px dashed var(--border-light); border-radius: 12px; padding: 10px; min-height: 200px; }
-        body.dark-theme .bc-script { background: #1e1e2e; border-color: #3a3a4e; }
-        .bc-hat { background: #FFBF00; color: #5a4500; font-weight: 800; border-radius: 16px 16px 7px 7px; padding: 9px 16px 13px; display: inline-block; font-size: 0.9em; box-shadow: inset 0 -3px 0 rgba(0,0,0,0.12); }
-        .bc-block { position: relative; width: fit-content; max-width: 100%; border-radius: 7px; padding: 9px 11px; margin: 0 0 2px; color: #fff; font-size: 0.84em; font-weight: 700; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; box-shadow: 0 2px 0 rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.30); text-shadow: 0 1px 1px rgba(0,0,0,0.18); }
-        .bc-block::before { content: ''; position: absolute; top: -3px; left: 16px; width: 18px; height: 7px; background: inherit; border-radius: 4px 4px 0 0; }
-        .bc-block input, .bc-block select { border: none; border-radius: 13px; padding: 3px 8px; font-size: 0.95em; width: 46px; text-align: center; color: #1a1a1a; box-shadow: inset 0 1px 2px rgba(0,0,0,0.25); }
+        .bc-script { --bc-bg: #f9f9f9; flex: 1; overflow: auto; background: #f9f9f9; background-image: radial-gradient(rgba(0,0,0,0.09) 1px, transparent 1px); background-size: 22px 22px; border: 2px dashed var(--border-light); border-radius: 12px; padding: 10px; min-height: 200px; }
+        body.dark-theme .bc-script { --bc-bg: #1e1e2e; background: #1e1e2e; background-image: radial-gradient(rgba(255,255,255,0.07) 1px, transparent 1px); background-size: 22px 22px; border-color: #3a3a4e; }
+        .bc-hat { position: relative; background: #FFBF00; border: 1px solid rgba(0,0,0,0.25); color: #fff; font-weight: 500; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; border-radius: 20px 20px 4px 4px; padding: 8px 16px 9px; display: inline-block; font-size: 0.86em; }
+        .bc-hat::after { content: ''; position: absolute; bottom: -5px; left: 14px; width: 24px; height: 4px; background: inherit; border: 1px solid rgba(0,0,0,0.25); border-top: none; border-radius: 0 0 4px 4px; z-index: 1; }
+        .bc-block { position: relative; width: fit-content; max-width: 100%; border: 1px solid rgba(0,0,0,0.25); border-radius: 4px; padding: 6px 12px 8px; margin: 0 0 3px; color: #fff; font-size: 0.82em; font-weight: 500; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .bc-block::before { content: ''; position: absolute; top: -1px; left: 14px; width: 24px; height: 4px; background: var(--bc-bg, #f9f9f9); border-radius: 0 0 4px 4px; }
+        .bc-block::after { content: ''; position: absolute; bottom: -5px; left: 14px; width: 24px; height: 4px; background: inherit; border: 1px solid rgba(0,0,0,0.25); border-top: none; border-radius: 0 0 4px 4px; z-index: 1; }
+        .bc-block input, .bc-block select { border: 1px solid rgba(0,0,0,0.15); border-radius: 999px; padding: 3px 9px; font-size: 0.95em; width: 46px; height: 22px; text-align: center; color: #575E75; background: #fff; font-weight: 600; box-shadow: none; }
         .bc-block input.txt { width: 96px; text-align: left; }
-        .bc-block select { width: auto; }
-        .bc-kids { margin-left: 13px; border-left: 14px solid rgba(0, 0, 0, 0.18); border-radius: 0 0 0 9px; padding: 3px 0 4px 8px; margin-top: 1px; }
+        .bc-block select { width: auto; background: rgba(0,0,0,0.18); color: #fff; border-color: rgba(0,0,0,0.28); -webkit-appearance: none; appearance: none; padding-right: 22px; background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; }
+        .bc-block select option { color: #1a1a1a; background: #fff; }
+        .bc-kids { margin-left: 0; border-left: 16px solid rgba(0, 0, 0, 0.18); border-radius: 0; padding: 4px 0 4px 7px; margin-top: 0; margin-bottom: 0; }
         .bc-del { background: rgba(0, 0, 0, 0.22); border: none; color: #fff; border-radius: 5px; cursor: pointer; width: 19px; height: 19px; line-height: 1; font-weight: 700; }
         .bc-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 6px; }
         .bc-tab { padding: 5px 12px; border: none; border-radius: 8px 8px 0 0; background: var(--border-light); color: var(--text-dark); cursor: pointer; font-weight: 700; font-size: 0.78em; }
@@ -1073,9 +1079,12 @@
         .bc-drop { min-height: 16px; }
         .bc-root { min-height: 150px; padding: 6px; border-radius: 8px; }
         .bc-drop.bc-kids { min-height: 22px; }
-        .bc-end { height: 11px; border-radius: 0 0 8px 8px; margin: 0 0 3px; opacity: 0.9; width: 60px; }
+        .bc-end { position: relative; height: 13px; border: 1px solid rgba(0,0,0,0.25); border-radius: 0 0 4px 4px; margin: 0 0 3px; opacity: 1; width: 92px; }
+        .bc-end::after { content: ''; position: absolute; bottom: -5px; left: 14px; width: 24px; height: 4px; background: inherit; border: 1px solid rgba(0,0,0,0.25); border-top: none; border-radius: 0 0 4px 4px; z-index: 1; }
         .bc-elselabel { width: fit-content; }
-        .bc-btns { margin-left: 8px; display: flex; gap: 3px; }
+        .bc-elselabel::before, .bc-elselabel::after { display: none; }
+        .bc-btns { margin-left: 8px; display: flex; gap: 3px; opacity: 0; transition: opacity 0.15s ease; }
+        .bc-block:hover .bc-btns { opacity: 1; }
         .bc-indicator { height: 5px; background: #ffd400; border-radius: 3px; margin: 2px 0; box-shadow: 0 0 7px rgba(255,212,0,0.85); }
         .bc-ghost { position: fixed; z-index: 99999; pointer-events: none; color: #fff; font-weight: 700; font-size: 0.82em; padding: 7px 11px; border-radius: 7px; box-shadow: 0 8px 22px rgba(0,0,0,0.45); opacity: 0.93; transform: rotate(-2deg); white-space: nowrap; }
         body.bc-dragging, body.bc-dragging * { cursor: grabbing !important; user-select: none; }
@@ -13102,6 +13111,14 @@ function drawPeriodicTrends(ctx, canvas) {
 
         function aiKey() { try { return (localStorage.getItem('geminiApiKey') || '').trim(); } catch (e) { return ''; } }
         function setAiKeyStored(k) { try { k ? localStorage.setItem('geminiApiKey', k) : localStorage.removeItem('geminiApiKey'); } catch (e) { } }
+        // Provider: 'aimode' opens questions in Google's AI Mode (no key needed); 'gemini' answers in-app via API key.
+        function aiProvider() { try { return localStorage.getItem('aiProvider') || (aiKey() ? 'gemini' : ''); } catch (e) { return aiKey() ? 'gemini' : ''; } }
+        function setAiProvider(p) { try { p ? localStorage.setItem('aiProvider', p) : localStorage.removeItem('aiProvider'); } catch (e) { } }
+        function aiModeUrl(q) {
+            let ctx = q;
+            if (currentSimulation) ctx += ' (I am learning about "' + currentSimulation.name + '" — ' + currentSimulation.description + ')';
+            return 'https://www.google.com/search?udm=50&q=' + encodeURIComponent(ctx);
+        }
         function aiPreferredModel() { try { return localStorage.getItem('geminiModel') || AI_MODELS[0]; } catch (e) { return AI_MODELS[0]; } }
 
         function aiContextLine() {
@@ -13191,7 +13208,7 @@ function drawPeriodicTrends(ctx, canvas) {
             const p = aiPanelEl();
             p.classList.add('show');
             document.getElementById('aiCtx').textContent = aiContextLine();
-            if (!aiKey()) { aiShowSetup(); return; }
+            if (!aiProvider()) { aiShowSetup(); return; }
             aiShowChat();
         }
         function closeAiPanel() { const p = document.getElementById('aiPanel'); if (p) p.classList.remove('show'); }
@@ -13207,19 +13224,28 @@ function drawPeriodicTrends(ctx, canvas) {
             document.getElementById('aiMsgs').style.display = 'none';
             document.getElementById('aiInRow').style.display = 'none';
             s.style.display = 'block';
+            const prov = aiProvider();
             s.innerHTML =
                 '<h3>Connect Google AI</h3>' +
-                'The AI Tutor answers with <b>Google AI (Gemini)</b>. It needs your own free API key — it is saved <b>only in this browser</b> and is sent only to Google.' +
-                '<ol><li>Open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> (free Google account)</li>' +
-                '<li>Click <b>Create API key</b> and copy it</li>' +
-                '<li>Paste it below</li></ol>' +
-                '<div class="ai-key-row">' +
-                    '<input type="password" class="ai-key-in" id="aiKeyInput" placeholder="Paste your Gemini API key (AIza…)" value="' + aiKey().replace(/"/g, '&quot;') + '">' +
-                    '<button class="ai-send" onclick="saveAiKey()">Save</button>' +
+                '<div style="background:rgba(102,126,234,0.10);border-radius:12px;padding:14px;margin-bottom:14px">' +
+                    '<b>🔎 Option A — Google AI Mode</b> <span style="opacity:.75">(no key, fastest)</span><br>' +
+                    'Your question opens in <b>Google\'s AI Mode</b> in a new tab — full Google AI answers, nothing to set up.' +
+                    '<div style="margin-top:10px"><button class="ai-send" onclick="setAiProvider(\'aimode\');aiShowChat()">Use Google AI Mode' + (prov === 'aimode' ? ' ✓' : '') + '</button></div>' +
                 '</div>' +
-                (aiKey() ? '<div class="ai-setup-note"><a href="javascript:void(0)" onclick="setAiKeyStored(\'\');aiShowSetup()">Remove saved key</a> · <a href="javascript:void(0)" onclick="aiShowChat()">Back to chat</a></div>' : '') +
+                '<div style="background:rgba(102,126,234,0.10);border-radius:12px;padding:14px">' +
+                    '<b>💬 Option B — In-app chat (Gemini API key)</b><br>' +
+                    'Answers appear right here in the chat. Needs your own free API key — saved <b>only in this browser</b>, sent only to Google.' +
+                    '<ol style="margin:8px 0"><li>Open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> (free Google account)</li>' +
+                    '<li>Click <b>Create API key</b> and copy it</li>' +
+                    '<li>Paste it below</li></ol>' +
+                    '<div class="ai-key-row">' +
+                        '<input type="password" class="ai-key-in" id="aiKeyInput" placeholder="Paste your Gemini API key (AIza…)" value="' + aiKey().replace(/"/g, '&quot;') + '">' +
+                        '<button class="ai-send" onclick="saveAiKey()">Save</button>' +
+                    '</div>' +
+                '</div>' +
+                ((aiKey() || prov) ? '<div class="ai-setup-note">' + (aiKey() ? '<a href="javascript:void(0)" onclick="setAiKeyStored(\'\');setAiProvider(\'\');aiShowSetup()">Remove saved key</a> · ' : '') + '<a href="javascript:void(0)" onclick="aiShowChat()">Back to chat</a></div>' : '') +
                 (errMsg ? '<div class="ai-setup-err">⚠️ ' + aiEsc(errMsg) + '</div>' : '') +
-                '<div class="ai-setup-note">The key never touches this app\'s servers (there are none — this is a single-file app). Requests go straight from your browser to Google.</div>';
+                '<div class="ai-setup-note">Nothing touches this app\'s servers (there are none — it\'s a single-file app). Everything goes straight from your browser to Google.</div>';
             const inp = document.getElementById('aiKeyInput');
             inp.onkeydown = e => { if (e.key === 'Enter') saveAiKey(); };
             setTimeout(() => inp.focus(), 30);
@@ -13229,6 +13255,7 @@ function drawPeriodicTrends(ctx, canvas) {
             const v = (inp.value || '').trim();
             if (v.length < 20) { inp.style.borderColor = '#e53e3e'; inp.focus(); return; }
             setAiKeyStored(v);
+            setAiProvider('gemini');
             aiShowChat();
         }
         function aiEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -13266,6 +13293,13 @@ function drawPeriodicTrends(ctx, canvas) {
             if (!q) return;
             inp.value = '';
             aiMessages.push({ role: 'user', text: q });
+            // Google AI Mode provider: hand the question (plus sim context) to Google in a new tab.
+            if (aiProvider() === 'aimode') {
+                window.open(aiModeUrl(q), '_blank', 'noopener');
+                aiMessages.push({ role: 'model', text: '🔎 Opened your question in **Google AI Mode** in a new tab' + (currentSimulation ? ' (with the ' + currentSimulation.name + ' context included)' : '') + '. Want in-app answers instead? Tap ⚙️ and add a free API key.' });
+                aiRender();
+                return;
+            }
             aiBusy = true; aiRender();
             try {
                 const answer = await callGemini();
@@ -14486,7 +14520,10 @@ function drawPeriodicTrends(ctx, canvas) {
         }
 
         // ===== BLOCK CODING (Scratch-style, custom view) =====
-        const BC_CAT_COLOR = { motion: '#4C97FF', looks: '#9966FF', sound: '#CF63CF', control: '#FFAB19', sensing: '#5CB1D6', variables: '#FF8C1A', pen: '#0FBD8C', operators: '#59C059', music: '#D459C6', tts: '#7C5CFF', translate: '#3AAF85', myblocks: '#FF6680', events: '#FFBF00' };
+        // Exact Scratch 3.0 palette: primary fill + darker outline per category (extensions are teal).
+        const BC_CAT_COLOR = { motion: '#4C97FF', looks: '#9966FF', sound: '#CF63CF', control: '#FFAB19', sensing: '#5CB1D6', variables: '#FF8C1A', pen: '#0FBD8C', operators: '#59C059', music: '#0FBD8C', tts: '#0FBD8C', translate: '#0FBD8C', myblocks: '#FF6680', events: '#FFBF00' };
+        const BC_CAT_EDGE = { motion: '#3373CC', looks: '#774DCB', sound: '#BD42BD', control: '#CF8B17', sensing: '#2E8EB8', variables: '#DB6E00', pen: '#0B8E69', operators: '#389438', music: '#0B8E69', tts: '#0B8E69', translate: '#0B8E69', myblocks: '#FF3355', events: '#CC9900' };
+        const bcPaint = cat => 'background:' + (BC_CAT_COLOR[cat] || '#888') + ';border-color:' + (BC_CAT_EDGE[cat] || 'rgba(0,0,0,0.25)');
         const BC_BLOCKS = {
             move: { cat: 'motion', t: 'move %steps steps', args: { steps: { type: 'n', def: 10 } } },
             turnR: { cat: 'motion', t: 'turn ↻ %deg degrees', args: { deg: { type: 'n', def: 15 } } },
@@ -14650,11 +14687,11 @@ function drawPeriodicTrends(ctx, canvas) {
             let pal = '';
             BC_PALETTE.forEach(g => {
                 pal += '<div class="bc-cat">' + g.label + '</div>';
-                g.ops.forEach(op => { pal += '<button class="bc-pal-btn" data-op="' + op + '" style="background:' + BC_CAT_COLOR[g.cat] + '">' + BC_PAL_LABEL[op] + '</button>'; });
+                g.ops.forEach(op => { pal += '<button class="bc-pal-btn" data-op="' + op + '" style="' + bcPaint(g.cat) + '">' + BC_PAL_LABEL[op] + '</button>'; });
             });
             pal += '<div class="bc-cat">My Blocks</div>';
-            pal += '<button class="bc-pal-btn" style="background:' + BC_CAT_COLOR.myblocks + '" onclick="bcMakeBlock()">＋ Make a Block</button>';
-            BC.defs.forEach(d => { pal += '<button class="bc-pal-btn" data-op="call" data-name="' + bcAttr(d.name) + '" style="background:' + BC_CAT_COLOR.myblocks + '">▶ ' + bcAttr(d.name) + '</button>'; });
+            pal += '<button class="bc-pal-btn" style="' + bcPaint('myblocks') + '" onclick="bcMakeBlock()">＋ Make a Block</button>';
+            BC.defs.forEach(d => { pal += '<button class="bc-pal-btn" data-op="call" data-name="' + bcAttr(d.name) + '" style="' + bcPaint('myblocks') + '">▶ ' + bcAttr(d.name) + '</button>'; });
             container.innerHTML = `
                 <div class="bc-wrap">
                     <div class="bc-palette">${pal}</div>
@@ -14903,16 +14940,16 @@ function drawPeriodicTrends(ctx, canvas) {
         }
         function bcRenderBlocks(list) {
             return list.map(b => {
-                const def = BC_BLOCKS[b.op]; const col = BC_CAT_COLOR[def.cat] || '#888';
+                const def = BC_BLOCKS[b.op]; const col = BC_CAT_COLOR[def.cat] || '#888'; const paint = bcPaint(def.cat);
                 let h = '<div class="bc-bw" data-uid="' + b.uid + '">';
-                h += '<div class="bc-block" data-uid="' + b.uid + '" style="background:' + col + '">' + bcTemplate(b) +
+                h += '<div class="bc-block" data-uid="' + b.uid + '" style="' + paint + '">' + bcTemplate(b) +
                     '<span class="bc-btns">' +
                     '<button class="bc-del" title="duplicate" onclick="bcDup(\'' + b.uid + '\')">⧉</button>' +
                     '<button class="bc-del" title="delete" onclick="bcDelete(\'' + b.uid + '\')">×</button></span></div>';
                 if (def.c) {
                     h += '<div class="bc-drop bc-kids" data-owner="' + b.uid + '" data-arm="1" style="border-left-color:' + col + '">' + bcRenderBlocks(b.kids) + '</div>';
-                    if (def.arm2) h += '<div class="bc-block bc-elselabel" style="background:' + col + ';opacity:.9">else</div><div class="bc-drop bc-kids" data-owner="' + b.uid + '" data-arm="2" style="border-left-color:' + col + '">' + bcRenderBlocks(b.kids2) + '</div>';
-                    h += '<div class="bc-end" style="background:' + col + '"></div>';
+                    if (def.arm2) h += '<div class="bc-block bc-elselabel" style="' + paint + '">else</div><div class="bc-drop bc-kids" data-owner="' + b.uid + '" data-arm="2" style="border-left-color:' + col + '">' + bcRenderBlocks(b.kids2) + '</div>';
+                    h += '<div class="bc-end" style="' + paint + '"></div>';
                 }
                 h += '</div>';
                 return h;
