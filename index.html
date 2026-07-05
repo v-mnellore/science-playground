@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Science Playground - 40+ Perfect Simulations</title>
+    <title>Science Playground — 140+ Interactive 3D Simulations</title>
     <style>
         /* ENHANCED SCIENCE PLAYGROUND v2
          * ================================
@@ -598,6 +598,11 @@
             border: 3px solid transparent;
             will-change: transform, box-shadow;
         }
+        .card-fav { position: absolute; top: 8px; right: 10px; z-index: 3; background: rgba(0,0,0,0.22); border: none; border-radius: 999px;
+            width: 32px; height: 32px; font-size: 1.05em; cursor: pointer; color: #fff; opacity: 0; transition: opacity 0.2s ease, transform 0.15s ease; }
+        .topic-card:hover .card-fav { opacity: 1; }
+        .card-fav.on { opacity: 1; background: rgba(245,181,10,0.25); }
+        .card-fav:hover { transform: scale(1.15); }
 
         body.dark-theme .topic-card {
             background-color: #2a2a3e;
@@ -1749,6 +1754,12 @@
         .pp-phys { background: rgba(79,172,254,0.10); }
 
         .pp-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+        .pp-act-fly { background: linear-gradient(135deg, #10b981, #059669); color: #fff; border: none; }
+        .pp-fly-ctl { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; margin-bottom: 10px; font-size: 0.88em; font-weight: 700; }
+        .pp-fly-ctl label { display: flex; align-items: center; gap: 6px; }
+        .pp-fly-ctl input[type=range] { width: 110px; }
+        .pp-fly-best { color: var(--primary); font-weight: 800; }
+        .pp-fly-msg { margin-top: 8px; font-size: 0.9em; color: var(--text-dark); }
         .pp-act { border: 2px solid var(--primary); background: var(--bg-white); color: var(--primary); border-radius: 10px; padding: 9px 15px; font-weight: 700; cursor: pointer; transition: all 0.2s ease; }
         .pp-act:hover { background: var(--primary); color: #fff; transform: translateY(-2px); box-shadow: 0 8px 16px rgba(102,126,234,0.35); }
 
@@ -2197,7 +2208,7 @@
     <!-- HEADER -->
     <div class="header">
         <h1>🔬 Science Playground</h1>
-        <p>40+ Perfect Interactive Physics, Chemistry, Biology & CS Simulations</p>
+        <p>140+ interactive 3D simulations · Quizzes · Paper Plane Lab · AI Tutor</p>
         <div class="header-controls">
             <input type="search" id="topicSearch" class="topic-search" placeholder="🔍 Search topics…" oninput="onSearch(this.value)" autocomplete="off">
             <button class="header-btn" id="themeBtn" onclick="toggleTheme()">🌙 Dark Mode</button>
@@ -2714,9 +2725,30 @@
             }
         }
 
+        // ---- Favorites & Recently viewed (localStorage) ----
+        function favList() { try { return JSON.parse(localStorage.getItem('favTopics') || '[]'); } catch (e) { return []; } }
+        function isFav(id) { return favList().indexOf(id) !== -1; }
+        function toggleFav(id, btn) {
+            let f = favList();
+            if (f.indexOf(id) !== -1) f = f.filter(x => x !== id); else f.unshift(id);
+            try { localStorage.setItem('favTopics', JSON.stringify(f.slice(0, 24))); } catch (e) { }
+            if (window.SFX) SFX.play('toggle');
+            renderTopicGrid();
+        }
+        function recentList() { try { return JSON.parse(localStorage.getItem('recentTopics') || '[]'); } catch (e) { return []; } }
+        function recordRecent(id) {
+            try {
+                let r = recentList().filter(x => x !== id);
+                r.unshift(id);
+                localStorage.setItem('recentTopics', JSON.stringify(r.slice(0, 8)));
+            } catch (e) { }
+        }
+
         function topicCardHTML(sim) {
+            const fav = isFav(sim.id);
             return `
                 <div class="card-icon-bg">${sim.icon}</div>
+                <button class="card-fav${fav ? ' on' : ''}" title="${fav ? 'Remove from favorites' : 'Add to favorites'}" onclick="toggleFav('${sim.id}', this)">${fav ? '⭐' : '☆'}</button>
                 <div class="card-content">
                     <div class="card-title">${sim.name}</div>
                     <div class="card-description">${sim.description}</div>
@@ -2767,6 +2799,21 @@
                 return;
             }
 
+            // Pinned rows: favorites first, then recently viewed (only on the unfiltered home grid)
+            if (!activeCategory) {
+                const pinnedRow = (icon, title, ids) => {
+                    const items = ids.map(id => simulations.find(s => s.id === id)).filter(Boolean);
+                    if (!items.length) return;
+                    const h = document.createElement('div');
+                    h.className = 'category-section-header';
+                    h.innerHTML = `<span class="category-section-icon">${icon}</span><span class="category-section-title">${title}</span><span class="category-section-count">${items.length} topics</span>`;
+                    container.appendChild(h);
+                    appendTopicGrid(container, items);
+                };
+                pinnedRow('⭐', 'Favorites', favList());
+                pinnedRow('🕘', 'Recently viewed', recentList());
+            }
+
             CATEGORY_ORDER.forEach(category => {
                 if (activeCategory && category !== activeCategory) return;
                 const items = simulations.filter(s => s.category === category);
@@ -2800,6 +2847,7 @@
 
         function openSimulation(id) {
             currentSimulation = simulations.find(s => s.id === id);
+            if (currentSimulation) recordRecent(id);
             if (!currentSimulation) return;
 
             SFX.play('open');
@@ -4302,7 +4350,8 @@
         }
         // ===== ADDED TOPICS (self-contained 2D canvas simulations) =====
         // Routed straight to the 2D renderer so they show their real diagram, not a generic 3D scene.
-        window.TWOD_ONLY = new Set(['damped-oscillation','terminal-velocity','ecg-heartbeat','fermentation','electrolysis','heating-curve','stack-queue','caesar-cipher']);
+        // (was a list of sims without bespoke 3D scenes — all of them have real 3D scenes now)
+        window.TWOD_ONLY = new Set([]);
         function nt_bg(ctx, c, a, b){ const g = ctx.createLinearGradient(0,0,0,c.height); g.addColorStop(0,a); g.addColorStop(1,b); ctx.fillStyle = g; ctx.fillRect(0,0,c.width,c.height); }
         function nt_txt(ctx, t, x, y, s, col, al){ ctx.save(); ctx.fillStyle = col || '#1f2937'; ctx.font = '600 ' + (s||14) + "px -apple-system,'Segoe UI',sans-serif"; ctx.textAlign = al || 'left'; ctx.fillText(t, x, y); ctx.restore(); }
 
@@ -14156,9 +14205,143 @@ function drawPeriodicTrends(ctx, canvas) {
                 '<div class="pp-box pp-throw"><h4>🎯 How to throw it</h4><p>' + ppEsc(p.throwing) + '</p></div>' +
                 (tuning ? '<div class="pp-box pp-tune"><h4>🔧 Tuning</h4><ul>' + tuning + '</ul></div>' : '') +
                 '<div class="pp-box pp-phys"><h4>🧪 The physics</h4><p>' + ppEsc(p.physics) + '</p></div>' +
-                '<div class="pp-actions"><button class="pp-act" onclick="ppVideo(\'' + p.id + '\')">📺 Watch a fold video</button>' +
-                    '<button class="pp-act" onclick="ppPrint(\'' + p.id + '\')">🖨️ Print steps</button><button class="pp-act" onclick="ppShare(\'' + p.id + '\')">🔗 Share</button></div>';
+                '<div class="pp-actions"><button class="pp-act pp-act-fly" onclick="ppFlightOpen(\'' + p.id + '\')">🛫 Test Flight</button>' +
+                    '<button class="pp-act" onclick="ppVideo(\'' + p.id + '\')">📺 Watch a fold video</button>' +
+                    '<button class="pp-act" onclick="ppPrint(\'' + p.id + '\')">🖨️ Print steps</button><button class="pp-act" onclick="ppShare(\'' + p.id + '\')">🔗 Share</button></div>' +
+                '<div id="ppFlight"></div>';
             ppShowRender();
+        }
+
+        // ===== TEST FLIGHT — virtual throw mini-sim; the plane's stats drive the physics =====
+        const ppFly = { raf: 0, planeId: null, run: null };
+        function ppFlightBest() { try { return JSON.parse(localStorage.getItem('ppFlightBest') || '{}'); } catch (e) { return {}; } }
+        function ppFlightOpen(id) {
+            const p = PAPER_PLANES.find(x => x.id === id); if (!p) return;
+            ppFly.planeId = id; ppFly.run = null;
+            const host = document.getElementById('ppFlight'); if (!host) return;
+            const best = ppFlightBest()[id];
+            host.innerHTML =
+                '<div class="pp-box pp-fly"><h4>🛫 Test Flight — throw it virtually</h4>' +
+                '<div class="pp-fly-ctl">' +
+                    '<label>Angle <input type="range" id="ppFlyAng" min="5" max="60" value="28"> <span id="ppFlyAngV">28°</span></label>' +
+                    '<label>Power <input type="range" id="ppFlyPow" min="40" max="130" value="95"> <span id="ppFlyPowV">95%</span></label>' +
+                    '<button class="pp-act" onclick="ppFlightThrow()">🛫 Throw!</button>' +
+                    '<span class="pp-fly-best">' + (best ? '🏆 Best: ' + best.toFixed(1) + ' m' : '') + '</span>' +
+                '</div>' +
+                '<canvas id="ppFlyCanvas" style="width:100%;height:240px;display:block;border-radius:12px"></canvas>' +
+                '<div class="pp-fly-msg" id="ppFlyMsg">Set your angle and power, then throw. Stats of this plane shape the flight!</div></div>';
+            const a = document.getElementById('ppFlyAng'), w = document.getElementById('ppFlyPow');
+            a.oninput = () => { document.getElementById('ppFlyAngV').textContent = a.value + '°'; };
+            w.oninput = () => { document.getElementById('ppFlyPowV').textContent = w.value + '%'; };
+            ppFlightDraw(null);
+            host.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        function ppFlightThrow() {
+            const p = PAPER_PLANES.find(x => x.id === ppFly.planeId); if (!p) return;
+            const ang = (+document.getElementById('ppFlyAng').value) * Math.PI / 180;
+            const pow = (+document.getElementById('ppFlyPow').value) / 100;
+            const st = p.stats || {};
+            const fam = p.family || '';
+            // launch speed from plane speed stat + throw power
+            const v0 = (7 + (st.speed || 3) * 2.6) * pow;
+            const run = {
+                x: 0, y: 1.6, vx: v0 * Math.cos(ang), vy: v0 * Math.sin(ang), t: 0, spin: 0,
+                trail: [], done: false, fam: fam,
+                cl: 0.010 + (st.airtime || 2) * 0.012,          // lift from air-time stat
+                cd: 0.050 - (st.distance || 3) * 0.006,          // sleeker planes = less drag
+                wobble: Math.max(0, 3.5 - (st.stability || 3)) * 0.55
+            };
+            if (run.cd < 0.012) run.cd = 0.012;
+            ppFly.run = run;
+            if (window.SFX) SFX.tone(600, 0.09, 'triangle', 0.08);
+            cancelAnimationFrame(ppFly.raf);
+            let last = 0;
+            const step = (ts) => {
+                const cv = document.getElementById('ppFlyCanvas');
+                if (!cv || !document.getElementById('ppFlight')) { ppFly.raf = 0; return; }   // panel left the DOM
+                let dt = last ? (ts - last) / 1000 : 1 / 60; last = ts;
+                if (!(dt > 0) || dt > 0.1) dt = 1 / 60;
+                const r = ppFly.run;
+                if (r && !r.done) {
+                    const sub = 2, h = dt / sub;
+                    for (let i = 0; i < sub && !r.done; i++) {
+                        const sp = Math.hypot(r.vx, r.vy);
+                        // gravity, lift (∝ v², opposes fall), drag (∝ v²)
+                        let lift = r.cl * sp * sp; if (lift > 8.4) lift = 8.4;
+                        r.vy += (-9.81 + lift) * h;
+                        r.vx -= r.cd * r.vx * sp * h;
+                        r.vy -= r.cd * r.vy * sp * h * 0.55;
+                        // family personality
+                        if (r.fam === 'Stunt / Trick') r.vy += Math.sin(r.t * 5.2) * 2.6 * h * Math.min(1, sp / 6);
+                        if (p.id === 'boomerang-plane') r.vx -= 1.35 * h * Math.max(0, r.t - 0.7);
+                        if (p.id === 'spinning-helicopter') { r.spin += 9 * h; if (r.vy < -1.15) r.vy = -1.15; r.vx *= (1 - 1.6 * h); }
+                        if (r.wobble) r.vy += (Math.sin(r.t * 9.7) + Math.sin(r.t * 6.1)) * r.wobble * h;
+                        r.x += r.vx * h; r.y += r.vy * h; r.t += h;
+                        if (r.y <= 0) { r.y = 0; r.done = true; }
+                        if (r.t > 30) r.done = true;
+                    }
+                    r.trail.push([r.x, r.y]);
+                    if (r.done) {
+                        const dist = Math.max(0, r.x);
+                        const best = ppFlightBest();
+                        const isRecord = !best[p.id] || dist > best[p.id];
+                        if (isRecord) { best[p.id] = dist; try { localStorage.setItem('ppFlightBest', JSON.stringify(best)); } catch (e) { } }
+                        const msg = document.getElementById('ppFlyMsg');
+                        if (msg) msg.innerHTML = '📏 <b>' + dist.toFixed(1) + ' m</b> in <b>' + r.t.toFixed(1) + ' s</b>' +
+                            (isRecord ? ' — 🏆 <b>new personal best!</b>' : '') +
+                            (p.id === 'boomerang-plane' && r.x < 1 ? ' It came back — that\'s the boomerang doing its job! 🪃' : '');
+                        const bEl = document.querySelector('.pp-fly-best'); if (bEl) bEl.textContent = '🏆 Best: ' + (isRecord ? dist : best[p.id]).toFixed(1) + ' m';
+                        if (window.SFX) SFX.play(isRecord ? 'success' : 'toggle');
+                    }
+                }
+                ppFlightDraw(ppFly.run);
+                if (ppFly.run && !ppFly.run.done) ppFly.raf = requestAnimationFrame(step);
+            };
+            ppFly.raf = requestAnimationFrame(step);
+        }
+        function ppFlightDraw(r) {
+            const cv = document.getElementById('ppFlyCanvas'); if (!cv) return;
+            const dpr = window.devicePixelRatio || 1;
+            const W = cv.clientWidth || 600, H = cv.clientHeight || 240;
+            if (cv.width !== W * dpr) { cv.width = W * dpr; cv.height = H * dpr; }
+            const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
+            // camera: keep the plane in view, min scale for long throws
+            const maxX = r ? Math.max(22, r.x + 6, (r.trail.length ? r.trail[r.trail.length - 1][0] : 0) + 6) : 24;
+            const s = (W - 30) / maxX;
+            const gy = H - 24;
+            const sky = g.createLinearGradient(0, 0, 0, H);
+            sky.addColorStop(0, '#aeddff'); sky.addColorStop(1, '#e8f7ff');
+            g.fillStyle = sky; g.fillRect(0, 0, W, H);
+            // clouds
+            g.fillStyle = 'rgba(255,255,255,0.85)';
+            [[0.2, 0.24], [0.55, 0.14], [0.82, 0.3]].forEach(c => {
+                const cx = c[0] * W, cy = c[1] * H;
+                g.beginPath(); g.arc(cx, cy, 13, 0, 7); g.arc(cx + 14, cy + 3, 10, 0, 7); g.arc(cx - 14, cy + 4, 9, 0, 7); g.fill();
+            });
+            // ground + distance ticks
+            g.fillStyle = '#79c267'; g.fillRect(0, gy, W, H - gy);
+            g.strokeStyle = '#4e934e'; g.beginPath(); g.moveTo(0, gy); g.lineTo(W, gy); g.stroke();
+            g.fillStyle = '#2e5d2e'; g.font = '600 10px Segoe UI, Arial'; g.textAlign = 'center';
+            const tick = maxX > 60 ? 20 : maxX > 30 ? 10 : 5;
+            for (let m = tick; m <= maxX; m += tick) { const x = 12 + m * s; g.fillRect(x, gy, 1.5, 5); g.fillText(m + ' m', x, gy + 16); }
+            // thrower
+            g.fillStyle = '#5b6472'; g.fillRect(9, gy - 26, 4, 26); g.beginPath(); g.arc(11, gy - 32, 6, 0, 7); g.fill();
+            if (r) {
+                // trail
+                g.strokeStyle = 'rgba(74,108,247,0.65)'; g.lineWidth = 2; g.beginPath();
+                r.trail.forEach((pt, i) => { const x = 12 + pt[0] * s, y = gy - pt[1] * s * 2.1; i ? g.lineTo(x, y) : g.moveTo(x, y); });
+                g.stroke();
+                // plane triangle oriented along velocity (or spin for helicopter)
+                const x = 12 + r.x * s, y = gy - r.y * s * 2.1;
+                const a = r.spin ? r.spin : Math.atan2(-(r.vy), r.vx);
+                g.save(); g.translate(x, y); g.rotate(a);
+                g.fillStyle = '#f5f7fb'; g.strokeStyle = '#5b6472'; g.lineWidth = 1.2;
+                g.beginPath(); g.moveTo(10, 0); g.lineTo(-8, -5); g.lineTo(-4, 0); g.lineTo(-8, 5); g.closePath(); g.fill(); g.stroke();
+                g.restore();
+            } else {
+                g.fillStyle = '#4a5568'; g.font = '700 13px Segoe UI, Arial'; g.textAlign = 'center';
+                g.fillText('Press 🛫 Throw! to launch', W / 2, H * 0.42);
+            }
         }
 
         // ---- unified step renderer (inline + full screen, 2D + 3D) ----
@@ -26240,7 +26423,7 @@ window.SCENES_3D['binary-search'] = {
     _bound: false,
 
     // ---- library data
-    builtins: function () { return CURATED.concat(autoQuizzes()); },
+    builtins: function () { return CURATED.concat(window.QZ_EXTRA || []).concat(autoQuizzes()); },
     userQuizzes: function () { return load(LS.quizzes, []); },
     allQuizzes: function () { return this.builtins().concat(this.userQuizzes()); },
     getQuiz: function (id) { return this.allQuizzes().filter(function (q) { return q.id === id; })[0] || null; },
@@ -26312,6 +26495,12 @@ window.SCENES_3D['binary-search'] = {
         '<p>Play fast-paced science quizzes solo or with friends — pass-and-play, split-screen couch co-op, teams, and AI bots. Build your own quizzes and collections too.</p>' +
         '<div class="qz-hero-actions">' +
         '<button class="qz-btn lg gold" data-act="go" data-arg="library">▶ Play a Quiz</button>' +
+        (function (self) {
+          var dq = self._dailyQuiz(); if (!dq) return '';
+          var st = self._dailyState(), done = self._dailyDone();
+          var streak = st.streak ? ' · 🔥 ' + st.streak : '';
+          return '<button class="qz-btn lg ' + (done ? 'ghost' : 'gold') + '" data-act="playDaily" title="' + esc(dq.quiz.title) + '">📅 Daily Challenge' + (done ? ' ✓' : '') + streak + '</button>';
+        })(this) +
         '<button class="qz-btn lg ghost" data-act="go" data-arg="create">✏️ Create Quiz</button>' +
         '<button class="qz-btn lg ghost" data-act="go" data-arg="join">🔗 Join Game</button>' +
         '</div></div>';
@@ -26737,9 +26926,36 @@ window.SCENES_3D['binary-search'] = {
       if (L.mode === 'split') input = 'live';
       this.game = {
         quiz: L.quiz, mode: L.mode, input: input, teams: L.teams, theme: L.theme || 'classic', time: L.time,
-        qs: this._buildQuestions(L), players: this._buildPlayers(L), idx: -1, turnPtr: 0, phase: 'count'
+        qs: this._buildQuestions(L), players: this._buildPlayers(L), idx: -1, turnPtr: 0, phase: 'count',
+        _daily: L._daily || null
       };
       this._runCountdown(this.nextQuestion.bind(this));
+    },
+
+    // ---- Daily Challenge: one deterministic quiz per calendar day + play streak ----
+    _dailyKey: function (d) { d = d || new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); },
+    _dailyQuiz: function () {
+      var key = this._dailyKey(), all = this.builtins();
+      var h = 0; for (var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+      return all.length ? { quiz: all[h % all.length], key: key } : null;
+    },
+    _dailyState: function () { try { return JSON.parse(localStorage.getItem('qzDaily') || '{}'); } catch (e) { return {}; } },
+    _dailyDone: function () { return this._dailyState().last === this._dailyKey(); },
+    playDaily: function () {
+      var dq = this._dailyQuiz(); if (!dq) return;
+      this.openLobby(dq.quiz);
+      this.lobby._daily = dq.key;
+    },
+    _dailyFinish: function (key) {
+      try {
+        var st = this._dailyState();
+        if (st.last === key) return st.streak || 1;   // already counted today
+        var y = new Date(); y.setDate(y.getDate() - 1);
+        st.streak = (st.last === this._dailyKey(y)) ? (st.streak || 0) + 1 : 1;
+        st.last = key;
+        localStorage.setItem('qzDaily', JSON.stringify(st));
+        return st.streak;
+      } catch (e) { return 1; }
     },
 
     _runCountdown: function (done) {
@@ -27143,8 +27359,13 @@ window.SCENES_3D['binary-search'] = {
         var cls = oi === 0 ? 'p1' : (oi === 1 ? 'p2' : 'p3');
         return '<div class="qz-pod ' + cls + '"><div class="pava">' + qzAvatar(top3[oi].avatar, top3[oi].acc) + '</div><div class="pname">' + esc(top3[oi].name) + '</div><div class="psc">' + top3[oi].val + ' ' + thm.cur + '</div></div>';
       }).join('');
+      var dailyLine = '';
+      if (g._daily) {
+        var streakN = this._dailyFinish(g._daily);
+        dailyLine = '<div style="text-align:center;font-size:1.15em;font-weight:800;margin:6px 0 14px">📅 Daily Challenge complete — 🔥 streak: ' + streakN + ' day' + (streakN === 1 ? '' : 's') + '!</div>';
+      }
       stage.querySelector('.qz-stage-body').innerHTML =
-        '<div class="qz-board"><h3>🎉 ' + esc(g.quiz.title) + ' — complete!</h3>' +
+        '<div class="qz-board"><h3>🎉 ' + esc(g.quiz.title) + ' — complete!</h3>' + dailyLine +
         '<div class="qz-podium">' + podHTML + '</div>' +
         '<div style="text-align:center"><button class="qz-btn lg gold" data-act="playAgain">🔁 Play again</button> ' +
         '<button class="qz-btn outline" data-act="quitGame">📚 Back to library</button></div></div>';
@@ -27499,6 +27720,1938 @@ window.SCENES_3D['binary-search'] = {
   };
 
 })();
+    </script>
+    <!-- ===== ENHANCEMENT PACK 1: 14 bespoke 3D scenes + 12 curated quizzes (generated + fact-checked) ===== -->
+    <script>
+    window.SCENES_3D = window.SCENES_3D || {};
+window.SCENES_3D['damped-oscillation'] = {
+  build(api) {
+    const { THREE, group, slider, hex, cat } = api;
+    const state = { spheresPos: [], spheresNeg: [], envN: 28, L: 2.6, pivotY: 2.6, theta0: 0.75, cycle: 18 };
+
+    // Floor grid for depth reference
+    const grid = new THREE.GridHelper(8, 16, 0x444444, 0x2a2a2a);
+    grid.position.y = -1.4;
+    group.add(grid);
+
+    // Support frame: two posts + top bar
+    const postMat = new THREE.MeshStandardMaterial({ color: 0x8a8a8a, metalness: 0.4, roughness: 0.5 });
+    for (const sx of [-1.6, 1.6]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 4.0, 12), postMat);
+      post.position.set(sx, state.pivotY - 2.0, 0);
+      group.add(post);
+    }
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 3.4, 12), postMat);
+    bar.rotation.z = Math.PI / 2;
+    bar.position.set(0, state.pivotY, 0);
+    group.add(bar);
+
+    // Pendulum arm (pivots at top bar): rod + bob inside a group
+    const arm = new THREE.Group();
+    arm.position.set(0, state.pivotY, 0);
+    const rod = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.035, 0.035, state.L, 10),
+      new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.6, roughness: 0.3 })
+    );
+    rod.position.y = -state.L / 2;
+    arm.add(rod);
+    const bob = new THREE.Mesh(
+      new THREE.SphereGeometry(0.32, 24, 18),
+      new THREE.MeshStandardMaterial({ color: 0x3b82f6, metalness: 0.3, roughness: 0.35 })
+    );
+    bob.position.y = -state.L;
+    arm.add(bob);
+    group.add(arm);
+    state.arm = arm;
+    state.bob = bob;
+
+    // Envelope: dotted curves of small spheres along the time axis (z),
+    // tracing +/- max horizontal excursion of the bob, fading as they decay
+    const bobY = state.pivotY - state.L;
+    for (let i = 0; i < state.envN; i++) {
+      const z = 0.2 + 3.4 * (i / (state.envN - 1)); // time axis marches away in +z
+      const mPos = new THREE.MeshStandardMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.8, emissive: 0x442200 });
+      const mNeg = new THREE.MeshStandardMaterial({ color: 0xf59e0b, transparent: true, opacity: 0.8, emissive: 0x442200 });
+      const sp = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), mPos);
+      const sn = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), mNeg);
+      sp.position.set(0, bobY, z);
+      sn.position.set(0, bobY, z);
+      group.add(sp);
+      group.add(sn);
+      state.spheresPos.push(sp);
+      state.spheresNeg.push(sn);
+    }
+
+    // Faint rest line (equilibrium) under the pivot
+    const rest = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, state.pivotY, 0),
+        new THREE.Vector3(0, state.pivotY - state.L - 0.5, 0)
+      ]),
+      new THREE.LineBasicMaterial({ color: 0x888888 })
+    );
+    group.add(rest);
+
+    return state;
+  },
+  update(state, t, api) {
+    const damp = Math.max(0.02, api.slider('dampSlider', 0.3));
+    const omega = 2.2; // swing frequency (rad/s)
+    const tt = t % state.cycle; // restart the decay so the demo loops
+
+    // Damped angular motion: theta(t) = theta0 * e^(-damp*t) * cos(omega*t)
+    const theta = state.theta0 * Math.exp(-damp * tt) * Math.cos(omega * tt);
+    state.arm.rotation.z = theta;
+
+    // Envelope spheres: sphere i shows the amplitude at time ti along the z (time) axis
+    const bobY = state.pivotY - state.L;
+    const n = state.envN;
+    for (let i = 0; i < n; i++) {
+      const ti = state.cycle * (i / (n - 1));
+      const amp = state.L * Math.sin(state.theta0 * Math.exp(-damp * ti));
+      const yEnv = state.pivotY - state.L * Math.cos(state.theta0 * Math.exp(-damp * ti));
+      const sp = state.spheresPos[i];
+      const sn = state.spheresNeg[i];
+      sp.position.set(amp, yEnv, sp.position.z);
+      sn.position.set(-amp, yEnv, sn.position.z);
+      // Fade the dots as the envelope decays; dots "ahead" of current time are dimmer
+      const decayFade = 0.15 + 0.75 * Math.exp(-damp * ti);
+      const timeFade = ti <= tt ? 1.0 : 0.35;
+      sp.material.opacity = decayFade * timeFade;
+      sn.material.opacity = decayFade * timeFade;
+    }
+  }
+};
+
+window.SCENES_3D['ecg-heartbeat'] = {
+  build(api) {
+    const { THREE, group, slider, hex, cat } = api;
+
+    // ---------- Stylized heart: two overlapping squashed red spheres + apex cone ----------
+    const heart = new THREE.Group();
+    const heartMat = new THREE.MeshStandardMaterial({
+      color: 0xc41e3a, roughness: 0.35, metalness: 0.1,
+      emissive: 0x550000, emissiveIntensity: 0.35
+    });
+    const lobeGeo = new THREE.SphereGeometry(0.85, 24, 18);
+    const lobeL = new THREE.Mesh(lobeGeo, heartMat);
+    lobeL.position.set(-0.45, 0.35, 0);
+    lobeL.scale.set(1, 1, 0.78);
+    const lobeR = new THREE.Mesh(lobeGeo, heartMat);
+    lobeR.position.set(0.45, 0.35, 0);
+    lobeR.scale.set(1, 1, 0.78);
+    const apex = new THREE.Mesh(new THREE.ConeGeometry(1.0, 1.7, 24), heartMat);
+    apex.rotation.x = Math.PI;          // point downward
+    apex.rotation.z = -0.15;            // slight anatomical tilt
+    apex.position.set(0.06, -0.5, 0);
+    apex.scale.set(1, 1, 0.78);
+    // aorta stub on top
+    const aorta = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.22, 0.28, 0.7, 16),
+      new THREE.MeshStandardMaterial({ color: 0x8c1626, roughness: 0.45 })
+    );
+    aorta.position.set(0.05, 1.15, 0);
+    aorta.rotation.z = 0.25;
+    heart.add(lobeL, lobeR, apex, aorta);
+    heart.position.set(-2.4, 0.1, 0);
+    group.add(heart);
+
+    // ---------- ECG monitor panel with faint grid ----------
+    const panelCx = 1.7, panelCy = 0.1;
+    const panel = new THREE.Mesh(
+      new THREE.PlaneGeometry(4.2, 2.4),
+      new THREE.MeshStandardMaterial({ color: 0x060f16, roughness: 0.9, side: THREE.DoubleSide })
+    );
+    panel.position.set(panelCx, panelCy, -0.07);
+    group.add(panel);
+
+    const gridMat = new THREE.LineBasicMaterial({ color: 0x16352c });
+    for (let gx = -2; gx <= 2.0001; gx += 0.5) {
+      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(panelCx + gx, panelCy - 1.15, -0.06),
+        new THREE.Vector3(panelCx + gx, panelCy + 1.15, -0.06)
+      ]), gridMat));
+    }
+    for (let gy = -1; gy <= 1.0001; gy += 0.5) {
+      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(panelCx - 2.05, panelCy + gy, -0.06),
+        new THREE.Vector3(panelCx + 2.05, panelCy + gy, -0.06)
+      ]), gridMat));
+    }
+
+    // ---------- Scrolling ECG trace ----------
+    const N = 260;                       // sample points across the screen
+    const traceLeft = panelCx - 2.0;     // x extent of trace
+    const traceSpan = 4.0;
+    const positions = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      positions[i * 3] = traceLeft + (i / (N - 1)) * traceSpan;
+      positions[i * 3 + 1] = panelCy;
+      positions[i * 3 + 2] = 0;
+    }
+    const traceGeo = new THREE.BufferGeometry();
+    traceGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const trace = new THREE.Line(traceGeo, new THREE.LineBasicMaterial({ color: 0x27f07a }));
+    group.add(trace);
+
+    // sweeping "now" cursor at the right edge
+    const cursor = new THREE.Mesh(
+      new THREE.SphereGeometry(0.06, 10, 8),
+      new THREE.MeshPhongMaterial({ color: 0x9dffc8, emissive: 0x27f07a })
+    );
+    cursor.position.set(traceLeft + traceSpan, panelCy, 0.02);
+    group.add(cursor);
+
+    // gaussian bump helper for the PQRST complex, phase p in [0,1)
+    const bump = (p, c, w) => Math.exp(-((p - c) * (p - c)) / (2 * w * w));
+    const ecg = function (p) {
+      p = ((p % 1) + 1) % 1;
+      let y = 0;
+      y += 0.13 * bump(p, 0.16, 0.030);   // P wave  (atrial depolarization)
+      y -= 0.10 * bump(p, 0.275, 0.011);  // Q dip
+      y += 1.00 * bump(p, 0.305, 0.013);  // R spike (ventricular depolarization)
+      y -= 0.22 * bump(p, 0.335, 0.011);  // S dip
+      y += 0.30 * bump(p, 0.52, 0.048);   // T wave  (ventricular repolarization)
+      return y * 0.85;
+    };
+
+    return {
+      heart, heartMat, trace, cursor, ecg, bump,
+      N, traceLeft, traceSpan, panelCy,
+      baseX: heart.position.x
+    };
+  },
+  update(state, t, api) {
+    const bpm = Math.max(20, api.slider('bpmSlider', 72));
+    const period = 60 / bpm;            // seconds per cardiac cycle
+    const phase = (t / period) % 1;
+
+    // ---------- Heart beat: realistic double thump ----------
+    // small atrial kick at the P wave, big ventricular contraction at QRS,
+    // gentle relaxation through the T wave (diastole).
+    const b = state.bump;
+    const atrial = 0.05 * b(phase, 0.18, 0.045);
+    const ventric = 0.14 * b(phase, 0.315, 0.05);
+    const relax = -0.03 * b(phase, 0.55, 0.09);
+    const s = 1 + atrial + ventric + relax;
+    state.heart.scale.set(s, 1 / Math.sqrt(s), s);  // squash: conserve rough volume
+    state.heart.rotation.y = 0.12 * Math.sin(t * 0.5);
+    state.heartMat.emissiveIntensity = 0.3 + 1.6 * ventric;
+
+    // ---------- Scroll the ECG trace right-to-left ----------
+    const pos = state.trace.geometry.attributes.position;
+    const windowCycles = 2.2;           // how many heartbeats fit on screen
+    for (let i = 0; i < state.N; i++) {
+      const frac = i / (state.N - 1);   // 0 = left edge, 1 = right edge (now)
+      const p = t / period - (1 - frac) * windowCycles;
+      pos.array[i * 3 + 1] = state.panelCy + state.ecg(p);
+    }
+    pos.needsUpdate = true;
+
+    // cursor rides the newest sample
+    state.cursor.position.y = state.panelCy + state.ecg(t / period);
+  }
+};
+
+window.SCENES_3D['fermentation'] = {
+  build(api) {
+    const { THREE, group, slider } = api;
+    const state = { yeast: [], bubbles: [], sugars: [], surfaceY: 1.6 };
+
+    // ---- Flask glass (translucent) ----
+    const glassMat = new THREE.MeshPhongMaterial({
+      color: 0xbfe6ff, transparent: true, opacity: 0.18,
+      shininess: 90, side: THREE.DoubleSide
+    });
+    const bodyGeo = new THREE.CylinderGeometry(2.0, 2.0, 3.4, 40, 1, true);
+    const body = new THREE.Mesh(bodyGeo, glassMat);
+    body.position.y = 0.1;
+    group.add(body);
+
+    const neckGeo = new THREE.CylinderGeometry(0.6, 2.0, 1.4, 40, 1, true); // conical neck
+    const neck = new THREE.Mesh(neckGeo, glassMat);
+    neck.position.y = 2.5;
+    group.add(neck);
+
+    const lipGeo = new THREE.CylinderGeometry(0.68, 0.6, 0.3, 40, 1, true);
+    const lip = new THREE.Mesh(lipGeo, glassMat);
+    lip.position.y = 3.35;
+    group.add(lip);
+
+    const baseGeo = new THREE.CylinderGeometry(2.0, 2.0, 0.12, 40);
+    const base = new THREE.Mesh(baseGeo, glassMat);
+    base.position.y = -1.6;
+    group.add(base);
+
+    // ---- Amber liquid (fills lower body) ----
+    const liqMat = new THREE.MeshStandardMaterial({
+      color: 0xd68a1e, transparent: true, opacity: 0.55,
+      roughness: 0.3, metalness: 0.0
+    });
+    const liqGeo = new THREE.CylinderGeometry(1.92, 1.92, 3.2, 40);
+    const liquid = new THREE.Mesh(liqGeo, liqMat);
+    liquid.position.y = 0.0;
+    group.add(liquid);
+    state.liquid = liquid;
+    state.surfaceY = 1.6;
+
+    // surface disc (amber, slightly opaque, ripples)
+    const surfMat = new THREE.MeshStandardMaterial({
+      color: 0xe8a63a, transparent: true, opacity: 0.7, roughness: 0.2
+    });
+    const surface = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 0.05, 40), surfMat);
+    surface.position.y = state.surfaceY;
+    group.add(surface);
+    state.surface = surface;
+
+    // ---- Yeast cells ----
+    const yeastMat = new THREE.MeshStandardMaterial({
+      color: 0xf2e3a0, roughness: 0.6, metalness: 0.05
+    });
+    for (let i = 0; i < 14; i++) {
+      const r = 0.14 + Math.random() * 0.1;
+      const cell = new THREE.Mesh(new THREE.SphereGeometry(r, 16, 12), yeastMat);
+      const ang = Math.random() * Math.PI * 2;
+      const rad = Math.random() * 1.5;
+      cell.position.set(Math.cos(ang) * rad, -1.4 + Math.random() * 2.6, Math.sin(ang) * rad);
+      cell.scale.set(1, 0.85 + Math.random() * 0.3, 1);
+      group.add(cell);
+      // small budding daughter cell
+      const bud = new THREE.Mesh(new THREE.SphereGeometry(r * 0.5, 12, 8), yeastMat);
+      bud.position.set(r * 0.9, r * 0.6, 0);
+      cell.add(bud);
+      state.yeast.push({ mesh: cell, base: cell.position.clone(), phase: Math.random() * Math.PI * 2, r: r });
+    }
+
+    // ---- Sugar cubes dissolving at the bottom ----
+    const sugarMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff, roughness: 0.4, metalness: 0.0, transparent: true, opacity: 0.9
+    });
+    for (let i = 0; i < 3; i++) {
+      const cube = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), sugarMat.clone());
+      const ang = (i / 3) * Math.PI * 2 + 0.5;
+      cube.position.set(Math.cos(ang) * 0.9, -1.35, Math.sin(ang) * 0.9);
+      cube.rotation.set(Math.random(), Math.random(), Math.random());
+      group.add(cube);
+      state.sugars.push({ mesh: cube, size: 1.0, speed: 0.02 + Math.random() * 0.02 });
+    }
+
+    // ---- CO2 bubble pool ----
+    const bubbleMat = new THREE.MeshPhongMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.5, shininess: 100
+    });
+    for (let i = 0; i < 60; i++) {
+      const b = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), bubbleMat);
+      b.visible = false;
+      group.add(b);
+      state.bubbles.push({
+        mesh: b, active: false, x: 0, z: 0, y: 0, vy: 0, size: 0.06, wob: Math.random() * Math.PI * 2
+      });
+    }
+    state.spawnAcc = 0;
+
+    return state;
+  },
+
+  update(state, t, api) {
+    const { slider } = api;
+    const temp = slider('tempSlider', 0.5); // 0..1
+    const spawnRate = 4 + temp * 26; // bubbles per second
+
+    // yeast gentle drift
+    for (const y of state.yeast) {
+      const m = y.mesh;
+      m.position.x = y.base.x + Math.sin(t * 0.6 + y.phase) * 0.08;
+      m.position.z = y.base.z + Math.cos(t * 0.5 + y.phase) * 0.08;
+      m.position.y = y.base.y + Math.sin(t * 0.4 + y.phase) * 0.06;
+      m.rotation.y += 0.005;
+    }
+
+    // sugar cubes shrink and slowly re-form (dissolve loop)
+    for (const s of state.sugars) {
+      s.size -= s.speed * (0.4 + temp) * 0.03;
+      if (s.size <= 0.15) s.size = 1.0;
+      s.mesh.scale.setScalar(s.size);
+      s.mesh.rotation.y += 0.01;
+      s.mesh.material.opacity = 0.25 + s.size * 0.65;
+    }
+
+    // surface ripple
+    if (state.surface) {
+      state.surface.scale.y = 1 + Math.sin(t * 3) * 0.15;
+      state.surface.rotation.y = Math.sin(t * 0.7) * 0.05;
+    }
+
+    // spawn bubbles at yeast cells
+    state.spawnAcc += spawnRate * (1 / 60);
+    while (state.spawnAcc >= 1) {
+      state.spawnAcc -= 1;
+      const free = state.bubbles.find(b => !b.active);
+      if (free && state.yeast.length) {
+        const src = state.yeast[(Math.random() * state.yeast.length) | 0];
+        free.active = true;
+        free.x = src.mesh.position.x + (Math.random() - 0.5) * 0.2;
+        free.z = src.mesh.position.z + (Math.random() - 0.5) * 0.2;
+        free.y = src.mesh.position.y;
+        free.vy = 0.6 + Math.random() * 0.6 + temp * 0.8;
+        free.size = 0.05 + Math.random() * 0.06;
+        free.wob = Math.random() * Math.PI * 2;
+        free.mesh.visible = true;
+        free.mesh.scale.setScalar(free.size / 0.06);
+      }
+    }
+
+    // rise and pop bubbles
+    const dt = 1 / 60;
+    for (const b of state.bubbles) {
+      if (!b.active) continue;
+      b.y += b.vy * dt;
+      b.wob += 0.15;
+      const wx = Math.sin(b.wob) * 0.05;
+      const wz = Math.cos(b.wob * 1.3) * 0.05;
+      b.mesh.position.set(b.x + wx, b.y, b.z + wz);
+      // grow slightly as it rises
+      b.mesh.scale.setScalar((b.size + (b.y + 1.6) * 0.01) / 0.06);
+      if (b.y >= state.surfaceY - 0.02) {
+        // pop at the surface
+        b.active = false;
+        b.mesh.visible = false;
+      }
+    }
+  }
+};
+
+window.SCENES_3D['electrolysis'] = {
+  build(api) {
+    const { THREE, group, slider, hex, cat } = api;
+    const state = { slider, bubbles: [], tubes: [] };
+
+    // --- Water tank (translucent box) ---
+    const tankW = 5, tankH = 3, tankD = 2.4;
+    const glassMat = new THREE.MeshPhongMaterial({ color: 0x88ccee, transparent: true, opacity: 0.15, side: THREE.DoubleSide, depthWrite: false });
+    const tank = new THREE.Mesh(new THREE.BoxGeometry(tankW, tankH, tankD), glassMat);
+    group.add(tank);
+    // water body (slightly smaller, bluer)
+    const waterMat = new THREE.MeshPhongMaterial({ color: 0x2288cc, transparent: true, opacity: 0.28, depthWrite: false });
+    const water = new THREE.Mesh(new THREE.BoxGeometry(tankW - 0.15, tankH - 0.5, tankD - 0.15), waterMat);
+    water.position.y = -0.25;
+    group.add(water);
+    const waterTop = water.position.y + (tankH - 0.5) / 2; // y of water surface
+
+    // base / floor
+    const base = new THREE.Mesh(new THREE.BoxGeometry(tankW + 0.6, 0.2, tankD + 0.6),
+      new THREE.MeshStandardMaterial({ color: 0x444455 }));
+    base.position.y = -tankH / 2 - 0.1;
+    group.add(base);
+
+    // --- Electrodes ---
+    // cathode (-) left: hydrogen (2x bubbles); anode (+) right: oxygen
+    const elecMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa, metalness: 0.8, roughness: 0.3 });
+    const elecX = 1.4, elecBottom = -tankH / 2 + 0.3;
+    const elecLen = 2.6;
+    function electrode(x, tipColor) {
+      const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, elecLen, 12), elecMat);
+      rod.position.set(x, elecBottom + elecLen / 2, 0);
+      group.add(rod);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 10),
+        new THREE.MeshStandardMaterial({ color: tipColor }));
+      cap.position.set(x, elecBottom + elecLen, 0);
+      group.add(cap);
+    }
+    electrode(-elecX, 0x3355ff); // cathode terminal (blue = negative)
+    electrode(elecX, 0xff3333);  // anode terminal (red = positive)
+
+    // --- Battery + wires above ---
+    const batt = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.6, 0.6),
+      new THREE.MeshStandardMaterial({ color: 0x222222 }));
+    batt.position.set(0, tankH / 2 + 1.0, 0);
+    group.add(batt);
+    const termNeg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.2, 8),
+      new THREE.MeshStandardMaterial({ color: 0x3355ff }));
+    termNeg.position.set(-0.35, tankH / 2 + 1.4, 0);
+    group.add(termNeg);
+    const termPos = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.2, 8),
+      new THREE.MeshStandardMaterial({ color: 0xff3333 }));
+    termPos.position.set(0.35, tankH / 2 + 1.4, 0);
+    group.add(termPos);
+    const elecTopY = elecBottom + elecLen;
+    function wire(points, color) {
+      const geo = new THREE.BufferGeometry().setFromPoints(points.map(p => new THREE.Vector3(p[0], p[1], p[2])));
+      group.add(new THREE.Line(geo, new THREE.LineBasicMaterial({ color })));
+    }
+    wire([[-0.35, tankH / 2 + 1.5, 0], [-0.35, tankH / 2 + 1.9, 0], [-elecX - 0.9, tankH / 2 + 1.9, 0], [-elecX - 0.9, elecTopY + 0.6, 0], [-elecX, elecTopY, 0]], 0x3355ff);
+    wire([[0.35, tankH / 2 + 1.5, 0], [0.35, tankH / 2 + 1.9, 0], [elecX + 0.9, tankH / 2 + 1.9, 0], [elecX + 0.9, elecTopY + 0.6, 0], [elecX, elecTopY, 0]], 0xff3333);
+
+    // --- Collection test tubes (inverted, over each electrode) ---
+    const tubeR = 0.32, tubeH = 1.7;
+    function testTube(x, gasColor) {
+      const tubeMat = new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false });
+      const tube = new THREE.Mesh(new THREE.CylinderGeometry(tubeR, tubeR, tubeH, 16, 1, true), tubeMat);
+      const tubeBottom = waterTop - 0.9; // open mouth below water surface
+      tube.position.set(x, tubeBottom + tubeH / 2, 0);
+      group.add(tube);
+      // closed rounded top
+      const capMat = new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false });
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(tubeR, 16, 8), capMat);
+      cap.position.set(x, tubeBottom + tubeH, 0);
+      cap.scale.y = 0.4;
+      group.add(cap);
+      // gas column that grows downward from the closed top
+      const gasMat = new THREE.MeshPhongMaterial({ color: gasColor, transparent: true, opacity: 0.5 });
+      const gas = new THREE.Mesh(new THREE.CylinderGeometry(tubeR * 0.88, tubeR * 0.88, 1, 14), gasMat);
+      gas.position.set(x, tubeBottom + tubeH, 0);
+      gas.scale.y = 0.02;
+      group.add(gas);
+      return { gas, topY: tubeBottom + tubeH, maxH: tubeH - 0.15, fill: 0.02 };
+    }
+    // hydrogen (cathode, left) pale cyan fills 2x as fast; oxygen (anode, right) pale warm tint
+    const tubeH2 = testTube(-elecX, 0xcfefff); tubeH2.rate = 2;
+    const tubeO2 = testTube(elecX, 0xffd9c0); tubeO2.rate = 1;
+    state.tubes.push(tubeH2, tubeO2);
+
+    // --- Bubbles: 24 hydrogen vs 12 oxygen (2:1 ratio, O2 slightly larger) ---
+    const bubGeoH = new THREE.SphereGeometry(0.05, 8, 8);
+    const bubGeoO = new THREE.SphereGeometry(0.065, 8, 8);
+    const bubMatH = new THREE.MeshPhongMaterial({ color: 0xe8f8ff, transparent: true, opacity: 0.85 });
+    const bubMatO = new THREE.MeshPhongMaterial({ color: 0xffe8dd, transparent: true, opacity: 0.85 });
+    const mouthY = waterTop - 0.9;
+    function spawnBubble(x, geo, mat) {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, elecBottom + 0.1 + Math.random() * (mouthY - elecBottom - 0.1), 0);
+      group.add(m);
+      state.bubbles.push({ mesh: m, x, phase: Math.random() * Math.PI * 2, y0: elecBottom + 0.1, speed: 0.7 + Math.random() * 0.3 });
+    }
+    for (let i = 0; i < 24; i++) spawnBubble(-elecX, bubGeoH, bubMatH); // hydrogen: twice as many
+    for (let i = 0; i < 12; i++) spawnBubble(elecX, bubGeoO, bubMatO);  // oxygen
+
+    state.mouthY = mouthY; // bubbles vanish into the tube mouth here
+    return state;
+  },
+  update(state, t, api) {
+    const volts = state.slider('voltSlider', 5);
+    const rate = Math.max(0.05, volts / 5);
+    const dt = state._lt === undefined ? 0.016 : Math.max(0, Math.min(0.05, t - state._lt));
+    state._lt = t;
+
+    // bubbles rise from electrode toward the tube mouth, wobbling
+    for (const b of state.bubbles) {
+      b.mesh.position.y += b.speed * rate * dt;
+      b.mesh.position.x = b.x + Math.sin(t * 3 + b.phase) * 0.06;
+      b.mesh.position.z = Math.cos(t * 2.3 + b.phase) * 0.06;
+      if (b.mesh.position.y > state.mouthY) {
+        b.mesh.position.y = b.y0; // respawn at electrode surface
+        b.phase = Math.random() * Math.PI * 2;
+      }
+    }
+
+    // test tubes fill: H2 (rate 2) exactly twice as fast as O2 (rate 1)
+    for (const tube of state.tubes) {
+      tube.fill += tube.rate * 0.045 * rate * dt;
+      if (tube.fill > tube.maxH) tube.fill = 0.02; // tube swapped out, collection restarts
+      tube.gas.scale.y = tube.fill;
+      tube.gas.position.y = tube.topY - tube.fill / 2; // gas column grows downward from closed top
+    }
+  }
+};
+
+window.SCENES_3D['heating-curve'] = {
+  build(api) {
+    const { THREE, group, slider, hex, cat } = api;
+    const state = { iceCubes: [], steam: [], slider };
+
+    // ---- Stand + burner base ----
+    const base = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.7, 1.9, 0.25, 32),
+      new THREE.MeshStandardMaterial({ color: 0x44485a, roughness: 0.8 })
+    );
+    base.position.y = -2.6;
+    group.add(base);
+
+    const burner = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.35, 0.45, 0.5, 20),
+      new THREE.MeshStandardMaterial({ color: 0x666e80, metalness: 0.4 })
+    );
+    burner.position.y = -2.25;
+    group.add(burner);
+
+    // ---- Flame (outer orange cone + inner blue cone) ----
+    const flame = new THREE.Mesh(
+      new THREE.ConeGeometry(0.35, 1.0, 16),
+      new THREE.MeshPhongMaterial({ color: 0xff9224, emissive: 0xff5500, transparent: true, opacity: 0.85 })
+    );
+    flame.position.y = -1.5;
+    group.add(flame);
+    const flameCore = new THREE.Mesh(
+      new THREE.ConeGeometry(0.18, 0.55, 12),
+      new THREE.MeshPhongMaterial({ color: 0x66aaff, emissive: 0x2255ff, transparent: true, opacity: 0.9 })
+    );
+    flameCore.position.y = -1.7;
+    group.add(flameCore);
+    state.flame = flame;
+    state.flameCore = flameCore;
+
+    // ---- Beaker (open glass cylinder + thin bottom) ----
+    const glassMat = new THREE.MeshPhongMaterial({
+      color: 0xbfe0ee, transparent: true, opacity: 0.22, side: THREE.DoubleSide, shininess: 90
+    });
+    const beaker = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 2.3, 32, 1, true), glassMat);
+    beaker.position.y = 0.15;
+    group.add(beaker);
+    const beakerBottom = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.06, 32), glassMat);
+    beakerBottom.position.y = -0.97;
+    group.add(beakerBottom);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.035, 8, 32),
+      new THREE.MeshPhongMaterial({ color: 0xd8eef7, transparent: true, opacity: 0.55 }));
+    rim.rotation.x = Math.PI / 2;
+    rim.position.y = 1.3;
+    group.add(rim);
+
+    // ---- Ice cube lattice (3 x 2 x 3 small cubes) ----
+    const iceMat = new THREE.MeshPhongMaterial({ color: 0xcfeeff, transparent: true, opacity: 0.9, shininess: 100 });
+    for (let ix = -1; ix <= 1; ix++) {
+      for (let iz = -1; iz <= 1; iz++) {
+        for (let iy = 0; iy < 2; iy++) {
+          const cube = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42), iceMat.clone());
+          cube.position.set(ix * 0.5, -0.72 + iy * 0.5, iz * 0.5);
+          cube.rotation.y = (ix + iz) * 0.3;
+          cube.userData.baseY = cube.position.y;
+          group.add(cube);
+          state.iceCubes.push(cube);
+        }
+      }
+    }
+
+    // ---- Liquid (flat translucent cylinder, unit height so scale.y = level) ----
+    const liquid = new THREE.Mesh(
+      new THREE.CylinderGeometry(1.14, 1.14, 1, 32),
+      new THREE.MeshPhongMaterial({ color: 0x2f8fe8, transparent: true, opacity: 0.55, shininess: 80 })
+    );
+    liquid.scale.y = 0.001;
+    liquid.position.y = -0.94;
+    group.add(liquid);
+    state.liquid = liquid;
+
+    // ---- Steam (rising translucent spheres) ----
+    const steamMat = new THREE.MeshPhongMaterial({ color: 0xeeeeee, transparent: true, opacity: 0.0 });
+    for (let i = 0; i < 10; i++) {
+      const s = new THREE.Mesh(new THREE.SphereGeometry(0.13 + 0.05 * (i % 3), 10, 8), steamMat.clone());
+      s.userData.off = i / 10;
+      s.userData.wob = i * 1.7;
+      s.visible = false;
+      group.add(s);
+      state.steam.push(s);
+    }
+
+    // ---- Thermometer (tube + red mercury column + bulb) ----
+    const thermo = new THREE.Group();
+    thermo.position.set(2.7, -0.4, 0);
+    group.add(thermo);
+    const tube = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.11, 0.11, 2.8, 16),
+      new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 })
+    );
+    tube.position.y = 1.4;
+    thermo.add(tube);
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12),
+      new THREE.MeshPhongMaterial({ color: 0xe23b3b, emissive: 0x550000 }));
+    thermo.add(bulb);
+    const mercury = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.06, 0.06, 1, 12),
+      new THREE.MeshPhongMaterial({ color: 0xe23b3b, emissive: 0x660000 })
+    );
+    mercury.scale.y = 0.001;
+    thermo.add(mercury);
+    state.mercury = mercury;
+
+    // Tick marks at the two plateau temperatures (melting 0.25, boiling 0.65)
+    const tickMat = new THREE.LineBasicMaterial({ color: 0x888888 });
+    [0.25, 0.65].forEach(function (frac) {
+      const y = frac * 2.6;
+      const tick = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(0.13, y, 0),
+          new THREE.Vector3(0.42, y, 0)
+        ]),
+        tickMat
+      );
+      thermo.add(tick);
+    });
+
+    return state;
+  },
+  update(state, t, api) {
+    const speed = state.slider('speed', 1);
+    const T = 20; // cycle length in seconds
+    const ct = (t * speed) % T;
+
+    // Heating-curve timeline (normalized temp 0..1):
+    // 0-3s   heat solid   temp 0    -> 0.25
+    // 3-7s   MELT plateau temp 0.25 (flat)
+    // 7-11s  heat liquid  temp 0.25 -> 0.65
+    // 11-16s BOIL plateau temp 0.65 (flat)
+    // 16-20s heat gas     temp 0.65 -> 1.0
+    let temp, meltFrac = 0, boilFrac = 0, phase;
+    if (ct < 3) { temp = 0.25 * (ct / 3); phase = 0; }
+    else if (ct < 7) { temp = 0.25; meltFrac = (ct - 3) / 4; phase = 1; }
+    else if (ct < 11) { temp = 0.25 + 0.4 * ((ct - 7) / 4); meltFrac = 1; phase = 2; }
+    else if (ct < 16) { temp = 0.65; meltFrac = 1; boilFrac = (ct - 11) / 5; phase = 3; }
+    else { temp = 0.65 + 0.35 * ((ct - 16) / 4); meltFrac = 1; boilFrac = 1; phase = 4; }
+
+    // Thermometer: mercury column rises with temp, flat during plateaus
+    const h = Math.max(0.001, temp * 2.6);
+    state.mercury.scale.y = h;
+    state.mercury.position.y = h / 2;
+
+    // Ice cubes shrink and settle as they melt
+    const iceScale = Math.max(0.001, 1 - meltFrac);
+    for (let i = 0; i < state.iceCubes.length; i++) {
+      const c = state.iceCubes[i];
+      c.visible = meltFrac < 0.999;
+      c.scale.setScalar(iceScale);
+      c.position.y = c.userData.baseY - meltFrac * 0.35;
+      c.rotation.y += 0.002 * meltFrac;
+      c.material.opacity = 0.9 * (1 - meltFrac * 0.6);
+    }
+
+    // Liquid level: rises while melting, drops while boiling away
+    const level = Math.max(0.001, meltFrac * 1.15 - boilFrac * 0.85);
+    state.liquid.scale.y = level;
+    state.liquid.position.y = -0.94 + level / 2;
+    state.liquid.material.opacity = 0.55 * Math.min(1, level * 4);
+    const surfaceY = -0.94 + level;
+
+    // Steam bubbles: only during boiling and gas heating
+    const steamOn = phase >= 3;
+    for (let i = 0; i < state.steam.length; i++) {
+      const s = state.steam[i];
+      s.visible = steamOn;
+      if (!steamOn) continue;
+      const p = (t * 0.35 * speed + s.userData.off) % 1;
+      s.position.y = surfaceY + 0.1 + p * (3.4 - surfaceY);
+      s.position.x = Math.sin(t * 1.3 + s.userData.wob) * 0.35 * (0.3 + p);
+      s.position.z = Math.cos(t * 1.1 + s.userData.wob) * 0.35 * (0.3 + p);
+      const grow = 1 + p * 1.6;
+      s.scale.setScalar(grow);
+      s.material.opacity = 0.45 * (1 - p) * (phase === 3 ? (0.3 + 0.7 * boilFrac) : 1);
+    }
+
+    // Flame flicker
+    const fl = 1 + 0.14 * Math.sin(t * 21) + 0.07 * Math.sin(t * 33 + 1.3);
+    state.flame.scale.set(1, fl, 1);
+    state.flameCore.scale.set(1, 1 + 0.1 * Math.sin(t * 27), 1);
+    state.flame.material.opacity = 0.75 + 0.15 * Math.sin(t * 17);
+  }
+};
+
+window.SCENES_3D['caesar-cipher'] = {
+  build(api) {
+    const { THREE, group, slider, hex, cat } = api;
+    const N = 26;
+    const step = (Math.PI * 2) / N;
+
+    // Base disc for context
+    const disc = new THREE.Mesh(
+      new THREE.CylinderGeometry(3.9, 3.9, 0.08, 48),
+      new THREE.MeshStandardMaterial({ color: 0x1c2333, roughness: 0.9 })
+    );
+    disc.position.y = -0.55;
+    group.add(disc);
+
+    // Ring guides
+    const mkRing = (r, c) => {
+      const pts = [];
+      for (let i = 0; i <= 64; i++) {
+        const a = (i / 64) * Math.PI * 2;
+        pts.push(new THREE.Vector3(Math.cos(a) * r, -0.5, Math.sin(a) * r));
+      }
+      return new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({ color: c })
+      );
+    };
+    group.add(mkRing(3.4, 0x4a5a7a));
+    group.add(mkRing(2.3, 0x4a5a7a));
+
+    // Outer (plain alphabet) ring — fixed
+    const outer = [];
+    const outerMatBase = { roughness: 0.5, metalness: 0.1 };
+    for (let i = 0; i < N; i++) {
+      const a = i * step;
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(0.34, 0.34, 0.34),
+        new THREE.MeshStandardMaterial(Object.assign({ color: 0x5b8dd6 }, outerMatBase))
+      );
+      m.position.set(Math.cos(a) * 3.4, 0, Math.sin(a) * 3.4);
+      m.rotation.y = -a;
+      group.add(m);
+      outer.push(m);
+    }
+
+    // Inner (cipher alphabet) ring — rotates by the shift
+    const innerGroup = new THREE.Group();
+    group.add(innerGroup);
+    const inner = [];
+    for (let i = 0; i < N; i++) {
+      const a = i * step;
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(0.3, 0.3, 0.3),
+        new THREE.MeshStandardMaterial(Object.assign({ color: 0xd6a35b }, outerMatBase))
+      );
+      m.position.set(Math.cos(a) * 2.3, 0, Math.sin(a) * 2.3);
+      m.rotation.y = -a;
+      innerGroup.add(m);
+      inner.push(m);
+    }
+
+    // Highlighted mapping pair: outer letter index 0 ("A") and its cipher partner.
+    const hlOuter = outer[0];
+    hlOuter.material.color.set(0x7fd0ff);
+    hlOuter.material.emissive = new THREE.Color(0x2277cc);
+
+    // Connector between the highlighted pair (thin cylinder re-aimed each frame)
+    const link = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.03, 0.03, 1, 8),
+      new THREE.MeshPhongMaterial({ color: 0xffee88, emissive: 0x665511 })
+    );
+    group.add(link);
+
+    // Center hub
+    const hub = new THREE.Mesh(
+      new THREE.SphereGeometry(0.28, 20, 16),
+      new THREE.MeshStandardMaterial({ color: 0x8888aa, metalness: 0.4, roughness: 0.4 })
+    );
+    group.add(hub);
+
+    return {
+      N, step, outer, inner, innerGroup, link,
+      curRot: 0,
+      hlInnerIdx: -1,
+      slider
+    };
+  },
+  update(state, t, api) {
+    const { slider } = api;
+    const N = state.N, step = state.step;
+    const shift = Math.round(slider('shiftSlider', 3)) % N;
+
+    // Smoothly rotate the inner ring to the shift offset.
+    // Inner box index k sits at angle k*step + rot; we want the box for letter (i+shift)
+    // to align with outer letter i, so rot target = -shift*step.
+    const target = -shift * step;
+    // shortest-path smoothing
+    let d = target - state.curRot;
+    d = Math.atan2(Math.sin(d), Math.cos(d));
+    state.curRot += d * 0.08;
+    state.innerGroup.rotation.y = state.curRot;
+
+    // Highlight the inner box currently mapping to outer "A" (index 0): letter (0+shift)%26
+    const idx = ((shift % N) + N) % N;
+    if (idx !== state.hlInnerIdx) {
+      if (state.hlInnerIdx >= 0) {
+        const prev = state.inner[state.hlInnerIdx];
+        prev.material.color.set(0xd6a35b);
+        prev.material.emissive.set(0x000000);
+        prev.scale.set(1, 1, 1);
+      }
+      const cur = state.inner[idx];
+      cur.material.color.set(0xffd27f);
+      cur.material.emissive.set(0xcc7722);
+      state.hlInnerIdx = idx;
+    }
+
+    // Pulse the highlighted pair
+    const pulse = 1.35 + 0.15 * Math.sin(t * 4);
+    state.outer[0].scale.set(pulse, pulse, pulse);
+    state.inner[idx].scale.set(pulse, pulse, pulse);
+
+    // Aim the connector between the two highlighted boxes (world positions on XZ plane)
+    const oa = 0; // outer A angle
+    const ox = Math.cos(oa) * 3.4, oz = Math.sin(oa) * 3.4;
+    const ia = idx * step + state.curRot;
+    const ix = Math.cos(ia) * 2.3, iz = Math.sin(ia) * 2.3;
+    const mx = (ox + ix) / 2, mz = (oz + iz) / 2;
+    const dx = ix - ox, dz = iz - oz;
+    const len = Math.max(Math.sqrt(dx * dx + dz * dz), 0.001);
+    state.link.position.set(mx, 0, mz);
+    state.link.scale.set(1, len, 1);
+    // cylinder axis is Y; rotate to lie along (dx,0,dz)
+    state.link.rotation.set(Math.PI / 2, 0, -Math.atan2(dz, dx) - Math.PI / 2);
+
+    // Gentle bobbing of both rings for depth
+    for (let i = 0; i < N; i++) {
+      const y = 0.06 * Math.sin(t * 1.5 + i * 0.5);
+      if (i !== 0) state.outer[i].position.y = y;
+      if (i !== idx) state.inner[i].position.y = -y;
+    }
+  }
+};
+
+window.SCENES_3D['terminal-velocity'] = {
+  build(api) {
+    const { THREE, group, slider, hex, cat } = api;
+
+    // --- Skydiver (body sphere + limb boxes) ---
+    const diver = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xff8844, roughness: 0.5 });
+    const limbMat = new THREE.MeshStandardMaterial({ color: 0x3366cc, roughness: 0.6 });
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.35, 20, 16), bodyMat);
+    diver.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.16, 16, 12), new THREE.MeshStandardMaterial({ color: 0xffddaa }));
+    head.position.set(0, 0.12, 0.42);
+    diver.add(head);
+    // limbs spread out (belly-to-earth pose, body plane horizontal)
+    const limbGeo = new THREE.BoxGeometry(0.12, 0.08, 0.55);
+    const limbs = [];
+    const limbCfg = [
+      { x: 0.42, z: 0.30, ry: -0.7 },
+      { x: -0.42, z: 0.30, ry: 0.7 },
+      { x: 0.30, z: -0.45, ry: 0.35 },
+      { x: -0.30, z: -0.45, ry: -0.35 }
+    ];
+    for (const c of limbCfg) {
+      const L = new THREE.Mesh(limbGeo, limbMat);
+      L.position.set(c.x, 0, c.z);
+      L.rotation.y = c.ry;
+      diver.add(L);
+      limbs.push(L);
+    }
+    diver.position.y = 1.2;
+    group.add(diver);
+
+    // --- Force arrows (shaft + cone tip, resizable) ---
+    function makeArrow(color) {
+      const g = new THREE.Group();
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.05, 1, 10),
+        new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.35 })
+      );
+      shaft.position.y = 0.5;
+      const tip = new THREE.Mesh(
+        new THREE.ConeGeometry(0.14, 0.3, 12),
+        new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.35 })
+      );
+      tip.position.y = 1.15;
+      g.add(shaft); g.add(tip);
+      return { g: g, shaft: shaft, tip: tip };
+    }
+    // gravity arrow: constant, points DOWN below the diver (red)
+    const gravArrow = makeArrow(0xff3333);
+    gravArrow.g.rotation.z = Math.PI;
+    gravArrow.g.position.set(-0.9, 1.2, 0);
+    group.add(gravArrow.g);
+    // drag arrow: grows with v^2, points UP (blue)
+    const dragArrow = makeArrow(0x33bbff);
+    dragArrow.g.position.set(0.9, 1.2, 0);
+    group.add(dragArrow.g);
+
+    function setArrowLen(a, len) {
+      len = Math.max(len, 0.001);
+      a.shaft.scale.y = len;
+      a.shaft.position.y = len / 2;
+      a.tip.position.y = len + 0.15;
+    }
+
+    // --- Air rings the diver falls through (scroll UP past the diver) ---
+    const rings = [];
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0x88ccee, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
+    const RING_COUNT = 7;
+    const SPAN = 8;
+    for (let i = 0; i < RING_COUNT; i++) {
+      const r = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.045, 10, 40), ringMat);
+      r.rotation.x = Math.PI / 2;
+      r.position.y = -4 + (i * SPAN) / RING_COUNT;
+      group.add(r);
+      rings.push(r);
+    }
+
+    // --- Ground grid (streams upward, wraps per cell to fake endless fall) ---
+    const grid = new THREE.GridHelper(8, 16, 0x556677, 0x334455);
+    grid.position.y = -3.8;
+    group.add(grid);
+
+    // faint airstream reference lines beside the diver
+    const trailMat = new THREE.LineBasicMaterial({ color: 0x888888 });
+    for (let i = 0; i < 4; i++) {
+      const x = Math.cos(i * Math.PI / 2) * 1.7;
+      const z = Math.sin(i * Math.PI / 2) * 1.7;
+      group.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(x, 0, z),
+          new THREE.Vector3(x, 0.9, z)
+        ]),
+        trailMat
+      ));
+    }
+
+    return {
+      diver: diver, limbs: limbs,
+      gravArrow: gravArrow, dragArrow: dragArrow, setArrowLen: setArrowLen,
+      rings: rings, grid: grid,
+      v: 0, lastT: 0, gridOff: 0
+    };
+  },
+
+  update(state, t, api) {
+    const { slider } = api;
+    const dt = Math.min(Math.max(t - state.lastT, 0), 0.05);
+    state.lastT = t;
+
+    // Physics: m dv/dt = m g - k v^2  ->  terminal velocity v_t = sqrt(m g / k)
+    const m = slider('massSlider', 70);        // kg
+    const g = 9.81;
+    const k = 12;                              // quadratic drag coefficient (fixed pose)
+    state.v += (g - (k / m) * state.v * state.v) * dt;
+    if (state.v < 0) state.v = 0;
+
+    const vt = Math.sqrt(m * g / k);
+    const frac = state.v / vt;                 // 0 -> 1 as drag catches gravity
+
+    // Gravity arrow constant (scales with mass); drag arrow = (k v^2)/(m g) of weight
+    const gravLen = 0.6 + 1.0 * (m / 100);
+    const dragLen = gravLen * Math.min(frac * frac, 1);
+    state.setArrowLen(state.gravArrow, gravLen);
+    state.setArrowLen(state.dragArrow, dragLen);
+
+    // World scrolls UP past the diver at the current fall speed
+    const dy = state.v * 0.12 * dt;
+    for (const r of state.rings) {
+      r.position.y += dy;
+      if (r.position.y > 4) r.position.y -= 8;
+      const s = 1 + 0.05 * Math.sin(t * 3 + r.position.y);
+      r.scale.set(s, s, 1);
+    }
+    // grid streams upward, wrapping every 0.5 (one cell) to look endless
+    state.gridOff = ((state.gridOff || 0) + dy) % 0.5;
+    state.grid.position.y = -3.8 + state.gridOff;
+
+    // diver wobbles while accelerating, steadies once at terminal velocity
+    const wob = (1 - Math.min(frac, 1)) * 0.15 + 0.02;
+    state.diver.rotation.z = Math.sin(t * 2.2) * wob;
+    state.diver.rotation.x = Math.cos(t * 1.7) * wob;
+    state.diver.position.y = 1.2 + Math.sin(t * 1.3) * wob * 0.5;
+    state.gravArrow.g.position.y = state.diver.position.y;
+    state.dragArrow.g.position.y = state.diver.position.y;
+    // limbs flutter in the airstream, faster with speed
+    for (let i = 0; i < state.limbs.length; i++) {
+      state.limbs[i].rotation.x = Math.sin(t * (4 + frac * 6) + i * 1.9) * 0.12;
+    }
+  }
+};
+
+window.SCENES_3D['vector-addition'] = {
+  build(api) {
+    const { THREE, group, slider, hex, cat } = api;
+
+    // Ground grid for spatial reference
+    const grid = new THREE.GridHelper(8, 16, 0x444444, 0x2a2a2a);
+    grid.position.y = -2.2;
+    group.add(grid);
+
+    // Origin marker
+    const origin = new THREE.Mesh(
+      new THREE.SphereGeometry(0.09, 16, 12),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x333333 })
+    );
+    group.add(origin);
+
+    // Faint XYZ axes
+    const axisMat = new THREE.LineBasicMaterial({ color: 0x555555 });
+    [[3.2,0,0],[0,3.2,0],[0,0,3.2]].forEach(function (p) {
+      const g = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0,0,0), new THREE.Vector3(p[0],p[1],p[2])
+      ]);
+      group.add(new THREE.Line(g, axisMat));
+    });
+
+    // Arrow factory: shaft (cylinder) + tip (cone), built along +Y, re-aimed via quaternion
+    function makeArrow(color, radius) {
+      const g = new THREE.Group();
+      const mat = new THREE.MeshStandardMaterial({ color: color, roughness: 0.4, metalness: 0.1 });
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, 1, 12), mat);
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(radius * 2.6, 0.32, 16), mat);
+      g.add(shaft);
+      g.add(tip);
+      group.add(g);
+      const up = new THREE.Vector3(0, 1, 0);
+      return {
+        g: g,
+        set: function (vec) {
+          const len = Math.max(vec.length(), 0.02);
+          const body = Math.max(len - 0.32, 0.02);
+          shaft.scale.set(1, body, 1);
+          shaft.position.y = body / 2;
+          tip.position.y = body + 0.16;
+          g.quaternion.setFromUnitVectors(up, vec.clone().normalize());
+        }
+      };
+    }
+
+    const arrA = makeArrow(0xe74c3c, 0.055); // red  A
+    const arrB = makeArrow(0x3498db, 0.055); // blue B
+    const arrR = makeArrow(0x2ecc71, 0.075); // green resultant A+B
+
+    // Parallelogram outline: origin -> A -> A+B -> B -> origin (thin gray line)
+    const paraGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(),
+      new THREE.Vector3(), new THREE.Vector3()
+    ]);
+    const paraLine = new THREE.Line(paraGeo, new THREE.LineBasicMaterial({ color: 0x888888 }));
+    group.add(paraLine);
+
+    return { arrA: arrA, arrB: arrB, arrR: arrR, paraGeo: paraGeo };
+  },
+
+  update(state, t, api) {
+    const { THREE, slider } = api;
+
+    // Vector A: user-set base angle plus slow precession, with gentle vertical bobbing
+    const aAng = slider('vaAng', 40) * Math.PI / 180 + t * 0.35;
+    const A = new THREE.Vector3(
+      Math.cos(aAng) * 2.1,
+      0.8 * Math.sin(t * 0.5),
+      Math.sin(aAng) * 2.1
+    );
+
+    // Vector B: user-set magnitude, slowly re-orienting in a different plane
+    const bMag = Math.min(Math.max(slider('vbMag', 1.8), 0.3), 2.5);
+    const bAng = -t * 0.22 + 1.3;
+    const B = new THREE.Vector3(
+      Math.cos(bAng) * bMag,
+      0.55 * Math.cos(t * 0.31) * bMag * 0.5 + 0.4,
+      Math.sin(bAng) * bMag
+    );
+
+    const R = A.clone().add(B); // resultant = component-wise sum (tip-to-tail diagonal)
+
+    state.arrA.set(A);
+    state.arrB.set(B);
+    state.arrR.set(R);
+
+    // Parallelogram: origin -> A -> A+B -> B -> origin
+    state.paraGeo.setFromPoints([
+      new THREE.Vector3(0, 0, 0), A, R, B, new THREE.Vector3(0, 0, 0)
+    ]);
+  }
+};
+
+window.SCENES_3D['phase-diagram'] = {
+  build(api) {
+    const { THREE, group, slider, hex, cat } = api;
+    const d = new THREE.Group();
+    d.rotation.x = -0.35;
+    group.add(d);
+
+    const S = 7;
+    const X = (t) => -S / 2 + S * t;   // temperature axis
+    const Z = (p) => S / 2 - S * p;    // pressure axis (high P toward back)
+
+    const grid = new THREE.GridHelper(S, 14, 0x555555, 0x2e2e2e);
+    d.add(grid);
+
+    function region(t0, t1, p0, p1, color) {
+      const g = new THREE.PlaneGeometry((t1 - t0) * S, (p1 - p0) * S);
+      const m = new THREE.MeshStandardMaterial({
+        color, transparent: true, opacity: 0.32,
+        side: THREE.DoubleSide, depthWrite: false
+      });
+      const mesh = new THREE.Mesh(g, m);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(X((t0 + t1) / 2), 0.03, Z((p0 + p1) / 2));
+      d.add(mesh);
+      return mesh;
+    }
+    region(0.00, 0.36, 0.00, 1.00, 0x3b82f6); // solid (low T)
+    region(0.38, 0.88, 0.32, 1.00, 0x22c55e); // liquid (mid T, high P)
+    region(0.42, 1.00, 0.00, 0.28, 0xf97316); // gas (high T, low P)
+
+    const TP = { t: 0.35, p: 0.25 };  // triple point
+    const CP = { t: 0.85, p: 0.80 };  // critical point
+
+    // sublimation curve: solid-gas boundary rising to the triple point
+    const sub = (u) => {
+      const t = 0.05 + u * (TP.t - 0.05);
+      return { t, p: TP.p * Math.pow((t - 0.05) / (TP.t - 0.05), 2) };
+    };
+    // vaporization curve: liquid-gas boundary, triple point -> critical point (ends there)
+    const vap = (u) => {
+      const t = TP.t + u * (CP.t - TP.t);
+      return { t, p: TP.p + (CP.p - TP.p) * Math.pow(u, 1.8) };
+    };
+    // fusion line: solid-liquid boundary, nearly vertical (slight negative slope, water-like)
+    const fus = (u) => ({ t: TP.t - 0.035 * u, p: TP.p + u * (0.98 - TP.p) });
+
+    function curve(fn, n, color) {
+      const pts = [];
+      for (let i = 0; i <= n; i++) {
+        const q = fn(i / n);
+        pts.push(new THREE.Vector3(X(q.t), 0.14, Z(q.p)));
+      }
+      d.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({ color })
+      ));
+      const beadGeo = new THREE.SphereGeometry(0.06, 10, 10);
+      const beadMat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.35 });
+      for (let i = 0; i <= n; i++) {
+        const s = new THREE.Mesh(beadGeo, beadMat);
+        s.position.copy(pts[i]);
+        d.add(s);
+      }
+      return pts;
+    }
+    const subPts = curve(sub, 12, 0x9dd0ff);
+    const vapPts = curve(vap, 14, 0xffe066);
+    const fusPts = curve(fus, 12, 0xc4b5fd);
+
+    // marker path: up the sublimation curve, along vaporization, then up the fusion line
+    const path = subPts.concat(vapPts.slice(1), fusPts.slice(1));
+
+    const triple = new THREE.Mesh(
+      new THREE.SphereGeometry(0.17, 16, 16),
+      new THREE.MeshStandardMaterial({ color: 0xffff66, emissive: 0xffff00, emissiveIntensity: 0.9 })
+    );
+    triple.position.set(X(TP.t), 0.14, Z(TP.p));
+    d.add(triple);
+
+    const critical = new THREE.Mesh(
+      new THREE.SphereGeometry(0.14, 16, 16),
+      new THREE.MeshStandardMaterial({ color: 0xff6666, emissive: 0xff2222, emissiveIntensity: 0.8 })
+    );
+    critical.position.set(X(CP.t), 0.14, Z(CP.p));
+    d.add(critical);
+
+    // axis arrows: temperature (+x) and pressure (-z)
+    const axMat = new THREE.LineBasicMaterial({ color: 0x888888 });
+    const o = 0.15;
+    d.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-S / 2, o, S / 2), new THREE.Vector3(S / 2 + 0.4, o, S / 2)
+    ]), axMat));
+    d.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(-S / 2, o, S / 2), new THREE.Vector3(-S / 2, o, -S / 2 - 0.4)
+    ]), axMat));
+    const coneMat = new THREE.MeshStandardMaterial({ color: 0xaaaaaa });
+    const coneT = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.35, 10), coneMat);
+    coneT.position.set(S / 2 + 0.5, o, S / 2);
+    coneT.rotation.z = -Math.PI / 2;
+    d.add(coneT);
+    const coneP = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.35, 10), coneMat);
+    coneP.position.set(-S / 2, o, -S / 2 - 0.5);
+    coneP.rotation.x = -Math.PI / 2;
+    d.add(coneP);
+
+    // traveling marker ball
+    const marker = new THREE.Mesh(
+      new THREE.SphereGeometry(0.13, 14, 14),
+      new THREE.MeshStandardMaterial({ color: 0xff66ff, emissive: 0xcc33cc, emissiveIntensity: 0.9 })
+    );
+    marker.position.copy(path[0]);
+    d.add(marker);
+
+    return { d, marker, triple, path };
+  },
+  update(state, t, api) {
+    const speed = api.slider('speed', 1);
+    const path = state.path;
+    const total = path.length - 1;
+    const u = (t * 0.08 * speed) % 1;
+    const f = u * total;
+    const i = Math.min(Math.floor(f), total - 1);
+    state.marker.position.lerpVectors(path[i], path[i + 1], f - i);
+    state.marker.position.y = 0.2 + 0.05 * Math.sin(t * 6);
+    const pulse = 1 + 0.22 * Math.sin(t * 4);
+    state.triple.scale.set(pulse, pulse, pulse);
+    state.d.rotation.y = 0.25 * Math.sin(t * 0.25);
+  }
+};
+
+window.SCENES_3D['solubility-curve'] = {
+  build(api) {
+    const { THREE, group, slider, hex, cat } = api;
+    const state = { crystals: [], particles: [], maxParticles: 40 };
+
+    // --- Beaker (transparent cylinder wall + rim) ---
+    const beakerR = 1.4, beakerH = 2.6;
+    const glassMat = new THREE.MeshPhongMaterial({
+      color: 0xbfe3ee, transparent: true, opacity: 0.18,
+      side: THREE.DoubleSide, depthWrite: false
+    });
+    const beaker = new THREE.Mesh(
+      new THREE.CylinderGeometry(beakerR, beakerR, beakerH, 32, 1, true), glassMat);
+    beaker.position.set(-1, beakerH / 2 - 1.4, 0);
+    group.add(beaker);
+    const bottom = new THREE.Mesh(
+      new THREE.CylinderGeometry(beakerR, beakerR, 0.06, 32),
+      new THREE.MeshPhongMaterial({ color: 0xbfe3ee, transparent: true, opacity: 0.3 }));
+    bottom.position.set(-1, -1.4, 0);
+    group.add(bottom);
+    const rim = new THREE.Mesh(
+      new THREE.TorusGeometry(beakerR, 0.04, 8, 32),
+      new THREE.MeshStandardMaterial({ color: 0x9fd0de }));
+    rim.position.set(-1, beakerH - 1.4, 0);
+    rim.rotation.x = Math.PI / 2;
+    group.add(rim);
+
+    // --- Water column ---
+    const waterH = 2.0;
+    const water = new THREE.Mesh(
+      new THREE.CylinderGeometry(beakerR * 0.94, beakerR * 0.94, waterH, 32),
+      new THREE.MeshPhongMaterial({ color: 0x3399dd, transparent: true, opacity: 0.35, depthWrite: false }));
+    water.position.set(-1, waterH / 2 - 1.37, 0);
+    group.add(water);
+    state.water = water;
+
+    // --- Crystals at the bottom (undissolved solute) ---
+    const crysMat = new THREE.MeshStandardMaterial({ color: 0x66ddee, metalness: 0.3, roughness: 0.35 });
+    const crysPos = [[-0.5, 0], [0.55, 0.2], [0, -0.55], [0.1, 0.55], [-0.55, -0.45], [0.5, -0.4]];
+    for (let i = 0; i < crysPos.length; i++) {
+      const c = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.34, 0.34), crysMat);
+      c.position.set(-1 + crysPos[i][0], -1.2, crysPos[i][1]);
+      c.rotation.y = i * 0.9;
+      c.userData.phase = i * 1.3;
+      group.add(c);
+      state.crystals.push(c);
+    }
+
+    // --- Dissolved solute particles swimming in the water ---
+    const partMat = new THREE.MeshStandardMaterial({
+      color: 0x99f0ff, emissive: new THREE.Color(0x1a5560), roughness: 0.4 });
+    for (let i = 0; i < state.maxParticles; i++) {
+      const p = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), partMat);
+      p.userData = {
+        r: 0.15 + Math.random() * (beakerR * 0.78),
+        a: Math.random() * Math.PI * 2,
+        wa: 0.4 + Math.random() * 0.8,
+        y0: Math.random(),
+        wy: 0.6 + Math.random() * 0.9,
+        ph: Math.random() * Math.PI * 2
+      };
+      p.visible = false;
+      group.add(p);
+      state.particles.push(p);
+    }
+
+    // --- Thermometer beside the beaker ---
+    const thermoX = 1.6;
+    const tube = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.12, 2.8, 16),
+      new THREE.MeshPhongMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 }));
+    tube.position.set(thermoX, 0.1, 0);
+    group.add(tube);
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.22, 16, 16),
+      new THREE.MeshStandardMaterial({ color: 0xdd2222, roughness: 0.3 }));
+    bulb.position.set(thermoX, -1.35, 0);
+    group.add(bulb);
+    const mercMat = new THREE.MeshStandardMaterial({ color: 0xdd2222, emissive: new THREE.Color(0x550000) });
+    const merc = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1, 12), mercMat);
+    merc.position.set(thermoX, -1.3, 0);
+    group.add(merc);
+    state.merc = merc; state.bulb = bulb; state.mercMat = mercMat;
+    // tick marks (scale graduations)
+    for (let i = 0; i <= 5; i++) {
+      const y = -1.2 + i * 0.5;
+      const tick = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(thermoX + 0.14, y, 0),
+          new THREE.Vector3(thermoX + 0.32, y, 0)]),
+        new THREE.LineBasicMaterial({ color: 0x888888 }));
+      group.add(tick);
+    }
+
+    // --- Ground grid for spatial reference ---
+    const grid = new THREE.GridHelper(8, 16, 0x444444, 0x2a2a2a);
+    grid.position.y = -1.5;
+    group.add(grid);
+
+    return state;
+  },
+
+  update(state, t, api) {
+    const { slider } = api;
+    // Temperature 0..100 C: slider sets baseline, time makes it rise & fall
+    const base = slider('tempSlider', 50);
+    const T = Math.max(0, Math.min(100, base + 35 * Math.sin(t * 0.35)));
+    const frac = T / 100; // solubility rises with temperature -> fraction dissolved
+
+    // Thermometer mercury column tracks T
+    const h = 0.15 + 2.3 * frac;
+    state.merc.scale.y = h;
+    state.merc.position.y = -1.3 + h / 2;
+    // hue shifts warmer as T rises
+    state.mercMat.color.setRGB(0.55 + 0.45 * frac, 0.15 * (1 - frac), 0.15 * (1 - frac));
+    state.bulb.scale.setScalar(1 + 0.05 * Math.sin(t * 2));
+
+    // Crystals shrink when hot (dissolving), regrow when cold (recrystallising)
+    for (let i = 0; i < state.crystals.length; i++) {
+      const c = state.crystals[i];
+      const s = Math.max(0.06, 1.05 - frac * (0.95 + 0.15 * Math.sin(c.userData.phase)));
+      c.scale.setScalar(s);
+      c.rotation.y += 0.002;
+      c.position.y = -1.32 + 0.17 * s;
+    }
+
+    // Dissolved particle count tracks temperature; visible ones swim (Brownian-ish)
+    const nVis = Math.round(frac * state.maxParticles);
+    for (let i = 0; i < state.particles.length; i++) {
+      const p = state.particles[i];
+      p.visible = i < nVis;
+      if (!p.visible) continue;
+      const u = p.userData;
+      const speed = 0.4 + 1.2 * frac; // hotter water = faster motion
+      const a = u.a + t * u.wa * speed;
+      const r = u.r * (0.9 + 0.1 * Math.sin(t * 1.7 + u.ph));
+      p.position.set(
+        -1 + Math.cos(a) * r,
+        -1.25 + (0.25 + 1.55 * (0.5 + 0.5 * Math.sin(t * u.wy * speed + u.ph)) * u.y0),
+        Math.sin(a) * r
+      );
+    }
+
+    // Water tint deepens slightly as more solute dissolves
+    state.water.material.opacity = 0.28 + 0.18 * frac;
+  }
+};
+
+window.SCENES_3D['gas-exchange'] = {
+  build(api) {
+    const { THREE, group } = api;
+    const state = { rbcs: [], o2: [], co2: [], t: 0 };
+
+    // Alveolus: large translucent sphere
+    const alveolus = new THREE.Mesh(
+      new THREE.SphereGeometry(2.2, 32, 32),
+      new THREE.MeshPhongMaterial({ color: 0xffc9d4, transparent: true, opacity: 0.28, side: THREE.DoubleSide, shininess: 30 })
+    );
+    group.add(alveolus);
+    state.alveolus = alveolus;
+
+    // Inner air-space hint (fainter core)
+    const air = new THREE.Mesh(
+      new THREE.SphereGeometry(2.0, 24, 24),
+      new THREE.MeshPhongMaterial({ color: 0xfff0f4, transparent: true, opacity: 0.12, side: THREE.DoubleSide })
+    );
+    group.add(air);
+
+    // Capillary tube wrapping the alveolus: torus around it
+    const capRadius = 2.9;   // ring radius
+    const tubeR = 0.35;      // tube thickness
+    const capillary = new THREE.Mesh(
+      new THREE.TorusGeometry(capRadius, tubeR, 20, 80),
+      new THREE.MeshPhongMaterial({ color: 0xd98a8a, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+    );
+    capillary.rotation.x = Math.PI / 2.4;
+    group.add(capillary);
+    state.capRadius = capRadius;
+    state.capTilt = capillary.rotation.x;
+
+    // Helper: position on capillary path given angle
+    state.pathPoint = (ang) => {
+      const x = Math.cos(ang) * capRadius;
+      const z = Math.sin(ang) * capRadius;
+      const y = 0;
+      // apply same tilt as torus (rotation about X axis)
+      const c = Math.cos(state.capTilt), s = Math.sin(state.capTilt);
+      return new THREE.Vector3(x, y * c - z * s, y * s + z * c);
+    };
+
+    // Red blood cells: squashed spheres travelling through the tube
+    const N = 6;
+    for (let i = 0; i < N; i++) {
+      const rbc = new THREE.Mesh(
+        new THREE.SphereGeometry(0.3, 16, 12),
+        new THREE.MeshStandardMaterial({ color: 0x7a0d0d, roughness: 0.5, metalness: 0.0 })
+      );
+      rbc.scale.set(1.0, 0.42, 1.0); // biconcave-ish disc
+      group.add(rbc);
+      state.rbcs.push({ mesh: rbc, ang: (i / N) * Math.PI * 2 });
+    }
+    state.darkRed = new THREE.Color(0x7a0d0d);
+    state.brightRed = new THREE.Color(0xff2b2b);
+
+    // Oxygen (light blue) crossing inward; CO2 (grey) crossing outward
+    const mkGas = (color, size) => new THREE.Mesh(
+      new THREE.SphereGeometry(size, 10, 10),
+      new THREE.MeshStandardMaterial({ color, roughness: 0.4, emissive: new THREE.Color(color).multiplyScalar(0.15) })
+    );
+    for (let i = 0; i < 8; i++) {
+      const o = mkGas(0x8fd3ff, 0.12);
+      group.add(o);
+      state.o2.push({ mesh: o, phase: Math.random(), dir: Math.random() * Math.PI * 2, tilt: (Math.random() - 0.5) * Math.PI });
+    }
+    for (let i = 0; i < 8; i++) {
+      const c = mkGas(0x9aa0a6, 0.12);
+      group.add(c);
+      state.co2.push({ mesh: c, phase: Math.random(), dir: Math.random() * Math.PI * 2, tilt: (Math.random() - 0.5) * Math.PI });
+    }
+
+    return state;
+  },
+
+  update(state, t, api) {
+    const { THREE } = api;
+    state.t = t;
+
+    // Alveolus gentle breathing
+    const breathe = 1 + Math.sin(t * 0.8) * 0.04;
+    state.alveolus.scale.setScalar(breathe);
+
+    // RBCs travel along capillary; oxygenate near the "top" of the loop (ang ~ PI/2)
+    state.rbcs.forEach((r) => {
+      r.ang += 0.35 * (1 / 60) * 6; // advance
+      if (r.ang > Math.PI * 2) r.ang -= Math.PI * 2;
+      const p = state.pathPoint(r.ang);
+      r.mesh.position.copy(p);
+      r.mesh.lookAt(0, 0, 0);
+      r.mesh.rotateX(Math.PI / 2);
+      r.mesh.scale.set(0.3 * 1.0, 0.3 * 0.42, 0.3 * 1.0);
+      r.mesh.scale.multiplyScalar(1); // keep disc
+
+      // oxygenation factor: max as it passes the front-top exchange zone
+      const oxy = Math.max(0, Math.sin(r.ang)); // 0..1 over half the loop
+      r.mesh.material.color.copy(state.darkRed).lerp(state.brightRed, oxy);
+    });
+
+    // O2 spheres: move from capillary (outer) inward toward alveolus center
+    state.o2.forEach((g) => {
+      g.phase += (1 / 60) * 0.5;
+      if (g.phase > 1) g.phase -= 1;
+      const rOuter = 2.9, rInner = 1.2;
+      const rad = rOuter - (rOuter - rInner) * g.phase;
+      const x = Math.cos(g.dir) * rad;
+      const z = Math.sin(g.dir) * rad;
+      const y = Math.sin(g.tilt) * rad * 0.3;
+      g.mesh.position.set(x, y, z);
+      g.mesh.material.opacity = 1;
+    });
+
+    // CO2 spheres: move from inside outward across the wall
+    state.co2.forEach((g) => {
+      g.phase += (1 / 60) * 0.5;
+      if (g.phase > 1) g.phase -= 1;
+      const rInner = 1.2, rOuter = 3.0;
+      const rad = rInner + (rOuter - rInner) * g.phase;
+      const x = Math.cos(g.dir) * rad;
+      const z = Math.sin(g.dir) * rad;
+      const y = Math.sin(g.tilt) * rad * 0.3;
+      g.mesh.position.set(x, y, z);
+    });
+  }
+};
+
+window.SCENES_3D['ecological-succession'] = {
+  build(api) {
+    const { THREE, group } = api;
+
+    // Ground disc
+    const ground = new THREE.Mesh(
+      new THREE.CylinderGeometry(4, 4, 0.3, 48),
+      new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 1 })
+    );
+    ground.position.y = -0.15;
+    group.add(ground);
+    const topY = 0;
+
+    // deterministic pseudo-random point placement on disc
+    const pts = [];
+    let seed = 12345;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+    for (let i = 0; i < 220; i++) {
+      const a = rnd() * Math.PI * 2;
+      const r = Math.sqrt(rnd()) * 3.6;
+      pts.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, r0: rnd() });
+    }
+    let pi = 0;
+    const next = () => pts[pi++ % pts.length];
+
+    const stages = []; // each: { items:[{mesh, baseScale}], start, end }
+
+    const addStage = (start, end) => {
+      const s = { items: [], start, end };
+      stages.push(s);
+      return s;
+    };
+    const reg = (stage, mesh, baseScale) => {
+      mesh.scale.setScalar(0.0001);
+      group.add(mesh);
+      stage.items.push({ mesh, baseScale });
+    };
+
+    // Stage 0: bare rock (grey boxes)
+    const s0 = addStage(0.0, 0.20);
+    for (let i = 0; i < 26; i++) {
+      const p = next();
+      const sz = 0.25 + p.r0 * 0.35;
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(sz, sz * 0.6, sz),
+        new THREE.MeshStandardMaterial({ color: 0x8a8a90, roughness: 0.9 })
+      );
+      m.position.set(p.x, topY + sz * 0.3, p.z);
+      m.rotation.y = p.r0 * 6.28;
+      reg(s0, m, 1);
+    }
+
+    // Stage 1: mosses (tiny green spheres)
+    const s1 = addStage(0.18, 0.38);
+    for (let i = 0; i < 40; i++) {
+      const p = next();
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(0.12 + p.r0 * 0.06, 8, 6),
+        new THREE.MeshStandardMaterial({ color: 0x4f8f3a, roughness: 1 })
+      );
+      m.scale.y = 0.5;
+      m.position.set(p.x, topY + 0.05, p.z);
+      reg(s1, m, 1);
+    }
+
+    // Stage 2: grasses (thin green cylinders)
+    const s2 = addStage(0.36, 0.56);
+    for (let i = 0; i < 46; i++) {
+      const p = next();
+      const h = 0.5 + p.r0 * 0.5;
+      const m = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.02, 0.04, h, 5),
+        new THREE.MeshStandardMaterial({ color: 0x5fae3d, roughness: 1 })
+      );
+      m.position.set(p.x, topY + h * 0.5, p.z);
+      m.rotation.z = (p.r0 - 0.5) * 0.4;
+      reg(s2, m, 1);
+    }
+
+    // Stage 3: shrubs (small green spheres on stems)
+    const s3 = addStage(0.54, 0.76);
+    for (let i = 0; i < 16; i++) {
+      const p = next();
+      const stemH = 0.35 + p.r0 * 0.2;
+      const shrub = new THREE.Group();
+      const stem = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.04, 0.05, stemH, 6),
+        new THREE.MeshStandardMaterial({ color: 0x5b3a22, roughness: 1 })
+      );
+      stem.position.y = stemH * 0.5;
+      shrub.add(stem);
+      const foli = new THREE.Mesh(
+        new THREE.SphereGeometry(0.32 + p.r0 * 0.12, 10, 8),
+        new THREE.MeshStandardMaterial({ color: 0x3f8c2f, roughness: 1 })
+      );
+      foli.position.y = stemH + 0.2;
+      shrub.add(foli);
+      shrub.position.set(p.x, topY, p.z);
+      reg(s3, shrub, 1);
+    }
+
+    // Stage 4: trees (tall trunks + cone canopies)
+    const s4 = addStage(0.74, 0.98);
+    for (let i = 0; i < 9; i++) {
+      const p = next();
+      const trunkH = 1.4 + p.r0 * 0.9;
+      const tree = new THREE.Group();
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.08, 0.14, trunkH, 8),
+        new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 1 })
+      );
+      trunk.position.y = trunkH * 0.5;
+      tree.add(trunk);
+      for (let k = 0; k < 3; k++) {
+        const cw = 0.9 - k * 0.22;
+        const canopy = new THREE.Mesh(
+          new THREE.ConeGeometry(cw, 0.9, 10),
+          new THREE.MeshStandardMaterial({ color: 0x2f7a34, roughness: 1 })
+        );
+        canopy.position.y = trunkH + 0.2 + k * 0.5;
+        tree.add(canopy);
+      }
+      tree.position.set(p.x, topY, p.z);
+      reg(s4, tree, 1);
+    }
+
+    return { stages, cycle: 12 };
+  },
+
+  update(state, t, api) {
+    const phase = (t % state.cycle) / state.cycle; // 0..1 loop
+    const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
+
+    for (const s of state.stages) {
+      // grow-in progress within the stage's window
+      let g = (phase - s.start) / (s.end - s.start);
+      g = ease(g);
+      // fade back near end of full cycle so reset is smooth
+      const reset = phase > 0.985 ? (1 - (phase - 0.985) / 0.015) : 1;
+      const grow = g * reset;
+      for (let i = 0; i < s.items.length; i++) {
+        const it = s.items[i];
+        const sc = Math.max(0.0001, grow * it.baseScale);
+        it.mesh.scale.setScalar(sc);
+        // gentle sway once grown
+        if (grow > 0.05) {
+          it.mesh.rotation.z = (it.mesh.userData.z0 !== undefined ? it.mesh.userData.z0 : 0) + Math.sin(t * 1.2 + i) * 0.03 * grow;
+        }
+      }
+    }
+  }
+};
+
+window.SCENES_3D['insertion-sort'] = {
+  build(api) {
+    const { THREE, group } = api;
+    const n = 9, spacing = 0.85, w = 0.55, liftY = 3.3;
+    const xOf = s => (s - (n - 1) / 2) * spacing;
+    const base = new THREE.Mesh(
+      new THREE.BoxGeometry(n * spacing + 1.2, 0.25, 1.8),
+      new THREE.MeshStandardMaterial({ color: 0x333a4d, roughness: 0.9 })
+    );
+    base.position.y = -0.125;
+    group.add(base);
+    const grid = new THREE.GridHelper(8, 16, 0x555555, 0x2a2a33);
+    grid.position.y = -0.26;
+    group.add(grid);
+    const order = [5, 1, 7, 3, 0, 8, 2, 6, 4];
+    const bars = [];
+    for (let s = 0; s < n; s++) {
+      const h = 0.5 + 2.2 * order[s] / (n - 1);
+      const m = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, w),
+        new THREE.MeshStandardMaterial({ color: 0x4f7fd9, emissive: 0x000000, roughness: 0.45, metalness: 0.15 })
+      );
+      m.position.set(xOf(s), h / 2, 0);
+      group.add(m);
+      bars.push({ mesh: m, h: h });
+    }
+    return {
+      n: n, liftY: liftY, xOf: xOf,
+      arr: bars.slice(),
+      mode: 'lift', i: 1, j: 0, key: null, keySlot: 0,
+      p: 0, lastT: 0, targets: null
+    };
+  },
+  update(state, t, api) {
+    const { slider, group } = api;
+    const S = state, xOf = S.xOf;
+    const dt = Math.min(Math.max(t - S.lastT, 0), 0.05);
+    S.lastT = t;
+    const speed = Math.max(0.1, slider('speedSlider', 1));
+    const ease = p => p * p * (3 - 2 * p);
+    const COL = { idle: 0x4f7fd9, active: 0xff8c33, sorted: 0x2fca6a };
+    const paint = (b, c, e) => {
+      b.mesh.material.color.setHex(c);
+      b.mesh.material.emissive.setHex(e || 0x000000);
+      b.mesh.material.emissiveIntensity = 1;
+    };
+    group.rotation.y = Math.sin(t * 0.15) * 0.25;
+    S.p += dt * speed;
+    if (S.mode === 'lift') {
+      if (!S.key) {
+        S.key = S.arr[S.i];
+        S.j = S.i - 1;
+        S.keySlot = S.i;
+        paint(S.key, COL.active, 0x662200);
+        for (let s = 0; s < S.i; s++) paint(S.arr[s], COL.sorted, 0x0a3318);
+        S.p = 0;
+      }
+      const q = Math.min(S.p / 0.45, 1), e = ease(q);
+      S.key.mesh.position.y = S.key.h / 2 + (S.liftY - S.key.h / 2) * e;
+      if (q >= 1) { S.mode = 'decide'; S.p = 0; }
+    } else if (S.mode === 'decide') {
+      if (S.j >= 0 && S.arr[S.j].h > S.key.h) { S.mode = 'shift'; S.p = 0; }
+      else { S.mode = 'drop'; S.p = 0; }
+    } else if (S.mode === 'shift') {
+      const q = Math.min(S.p / 0.4, 1), e = ease(q);
+      const mover = S.arr[S.j];
+      mover.mesh.position.x = xOf(S.j) + (xOf(S.j + 1) - xOf(S.j)) * e;
+      S.key.mesh.position.x = xOf(S.keySlot) + (xOf(S.keySlot - 1) - xOf(S.keySlot)) * e;
+      S.key.mesh.position.y = S.liftY + Math.sin(q * Math.PI) * 0.15;
+      if (q >= 1) {
+        S.arr[S.j + 1] = mover;
+        S.keySlot = S.j;
+        S.j--;
+        S.mode = 'decide'; S.p = 0;
+      }
+    } else if (S.mode === 'drop') {
+      const q = Math.min(S.p / 0.4, 1), e = ease(q);
+      const slot = S.j + 1;
+      S.key.mesh.position.x = xOf(slot);
+      S.key.mesh.position.y = S.liftY + (S.key.h / 2 - S.liftY) * e;
+      if (q >= 1) {
+        S.arr[slot] = S.key;
+        S.i++;
+        for (let s = 0; s < S.i && s < S.n; s++) paint(S.arr[s], COL.sorted, 0x0a3318);
+        S.key = null;
+        S.p = 0;
+        S.mode = S.i >= S.n ? 'celebrate' : 'lift';
+      }
+    } else if (S.mode === 'celebrate') {
+      for (const b of S.arr) {
+        b.mesh.material.emissive.setHex(0x0a3318);
+        b.mesh.material.emissiveIntensity = 1 + 0.8 * (0.5 + 0.5 * Math.sin(t * 6 + b.mesh.position.x));
+        b.mesh.scale.y = 1 + 0.06 * Math.sin(t * 6 + b.mesh.position.x);
+        b.mesh.position.y = (b.h / 2) * b.mesh.scale.y;
+      }
+      if (S.p > 2.2) {
+        const perm = [];
+        for (let s = 0; s < S.n; s++) perm.push(s);
+        for (let s = S.n - 1; s > 0; s--) {
+          const r = Math.floor(Math.random() * (s + 1));
+          const tmp = perm[s]; perm[s] = perm[r]; perm[r] = tmp;
+        }
+        const newArr = new Array(S.n);
+        S.targets = [];
+        for (let s = 0; s < S.n; s++) {
+          const b = S.arr[s];
+          b.mesh.scale.y = 1;
+          b.mesh.position.y = b.h / 2;
+          newArr[perm[s]] = b;
+          S.targets.push({ b: b, from: xOf(s), to: xOf(perm[s]) });
+          paint(b, COL.idle, 0);
+        }
+        S.arr = newArr;
+        S.mode = 'reshuffle'; S.p = 0;
+      }
+    } else if (S.mode === 'reshuffle') {
+      const q = Math.min(S.p / 1.0, 1), e = ease(q);
+      for (const tg of S.targets) {
+        tg.b.mesh.position.x = tg.from + (tg.to - tg.from) * e;
+        tg.b.mesh.position.y = tg.b.h / 2 + Math.sin(q * Math.PI) * 0.6;
+      }
+      if (q >= 1) {
+        for (const tg of S.targets) tg.b.mesh.position.y = tg.b.h / 2;
+        S.targets = null; S.i = 1; S.key = null; S.mode = 'lift'; S.p = 0;
+        paint(S.arr[0], COL.sorted, 0x0a3318);
+      }
+    }
+  }
+};
+
+window.SCENES_3D['stack-queue'] = {
+  build(api) {
+    const { THREE, group, slider, hex, cat } = api;
+    const state = { stackBoxes: [], queueBoxes: [] };
+    const mat = (c, e) => new THREE.MeshStandardMaterial({ color: c, emissive: e || 0x000000, roughness: 0.45, metalness: 0.15 });
+
+    // ---------- ground grid ----------
+    const grid = new THREE.GridHelper(8, 16, 0x444455, 0x2a2a38);
+    grid.position.y = -1.85;
+    group.add(grid);
+
+    // ================= STACK (left): vertical pile, LIFO =================
+    const sx = -2.1, baseY = -1.8;
+    const base = new THREE.Mesh(new THREE.BoxGeometry(1.7, 0.15, 1.7), mat(0x37474f));
+    base.position.set(sx, baseY + 0.075, 0);
+    group.add(base);
+
+    // translucent back wall suggesting a container open only at the top
+    const wall = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.7, 2.4),
+      new THREE.MeshStandardMaterial({ color: 0x263238, side: THREE.DoubleSide, transparent: true, opacity: 0.35 })
+    );
+    wall.position.set(sx, baseY + 1.35, -0.86);
+    group.add(wall);
+
+    const boxH = 0.5, boxW = 1.1;
+    const stackColors = [0x1565c0, 0x1e88e5, 0x64b5f6];
+    for (let i = 0; i < 3; i++) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), mat(stackColors[i]));
+      b.position.set(sx, baseY + 0.15 + boxH / 2 + i * (boxH + 0.04), 0);
+      group.add(b);
+      state.stackBoxes.push(b);
+    }
+    // the animated box that is pushed onto and popped off the TOP (LIFO)
+    const mover = new THREE.Mesh(new THREE.BoxGeometry(boxW, boxH, boxW), mat(0xffb300, 0x442a00));
+    group.add(mover);
+    state.mover = mover;
+    state.sx = sx;
+    state.moverRestY = baseY + 0.15 + boxH / 2 + 3 * (boxH + 0.04);
+    state.moverHighY = 3.1;
+
+    // downward cone above the stack = push/pop happen at the top
+    const sArrow = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.4, 12), mat(0xff7043, 0x331100));
+    sArrow.rotation.x = Math.PI;
+    sArrow.position.set(sx, 3.5, 0);
+    group.add(sArrow);
+    state.sArrow = sArrow;
+
+    // ================= QUEUE (right): horizontal channel, FIFO =================
+    const qx = 2.1;
+    const floor = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.15, 5.2), mat(0x37474f));
+    floor.position.set(qx, baseY + 0.075, 0);
+    group.add(floor);
+    for (const dx of [-0.72, 0.72]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.4, 5.2), mat(0x546e7a));
+      rail.position.set(qx + dx, baseY + 0.3, 0);
+      group.add(rail);
+    }
+    // flow guide line above the channel (enqueue at back -z, dequeue at front +z)
+    const flow = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(qx, baseY + 1.2, -2.6),
+        new THREE.Vector3(qx, baseY + 1.2, 2.6)
+      ]),
+      new THREE.LineBasicMaterial({ color: 0x888888 })
+    );
+    group.add(flow);
+    // forward cone at the exit = items leave from the FRONT
+    const qArrow = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.4, 12), mat(0xff7043, 0x331100));
+    qArrow.rotation.x = Math.PI / 2;
+    qArrow.position.set(qx, baseY + 1.2, 2.9);
+    group.add(qArrow);
+
+    const qColors = [0x2e7d32, 0x43a047, 0x66bb6a, 0x81c784, 0xa5d6a7];
+    for (let j = 0; j < 5; j++) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.85), mat(qColors[j]));
+      group.add(b);
+      state.queueBoxes.push(b);
+    }
+    state.qx = qx;
+    state.qBoxY = baseY + 0.15 + 0.25;
+    state.slider = slider;
+    return state;
+  },
+  update(state, t, api) {
+    const speed = state.slider('speed', 1);
+    const T = 3.0 / Math.max(0.1, speed);   // one push+pop / one shift per cycle
+    const u = t / T;
+    const p = u - Math.floor(u);            // phase 0..1 within cycle
+
+    // ---- STACK: push (drop onto top), rest, pop (lift off) ----
+    const m = state.mover;
+    let y;
+    if (p < 0.35) {                          // PUSH: ease-out drop
+      const k = p / 0.35, e = 1 - (1 - k) * (1 - k);
+      y = state.moverHighY + (state.moverRestY - state.moverHighY) * e;
+      m.rotation.y = (1 - e) * 0.8;
+    } else if (p < 0.6) {                    // resting on top of the pile
+      y = state.moverRestY;
+      m.rotation.y = 0;
+    } else if (p < 0.95) {                   // POP: ease-in lift from the top
+      const k = (p - 0.6) / 0.35, e = k * k;
+      y = state.moverRestY + (state.moverHighY - state.moverRestY) * e;
+      m.rotation.y = e * 0.8;
+    } else {
+      y = state.moverHighY;
+    }
+    m.position.set(state.sx, y, 0);
+    // highlight the active box while it moves
+    m.material.emissive.setHex(p > 0.35 && p < 0.6 ? 0x1a0f00 : 0x553300);
+    state.sArrow.position.y = 3.5 + 0.12 * Math.sin(t * 4);
+
+    // ---- QUEUE: FIFO conveyor; eased shift of one slot per cycle ----
+    // shift progress: move during first 40% of cycle, hold the rest
+    const q = Math.min(1, p / 0.4);
+    const eq = q < 0.5 ? 2 * q * q : 1 - 2 * (1 - q) * (1 - q); // smooth ease
+    const uu = Math.floor(u) + eq;           // continuous slot parameter
+    const n = state.queueBoxes.length;       // 5 boxes over 5 slots
+    for (let j = 0; j < n; j++) {
+      const b = state.queueBoxes[j];
+      let f = ((j + uu) % n) / n;            // 0 = back (enqueue), 1 = front (dequeue)
+      if (f < 0) f += 1;
+      const z = -2.35 + f * 4.7;
+      // grow when entering at the back, shrink when leaving at the front
+      const s = Math.max(0.001, Math.min(1, f * n, (1 - f) * n));
+      b.position.set(state.qx, state.qBoxY - 0.25 * (1 - s), z);
+      b.scale.set(s, s, s);
+    }
+  }
+};
+    window.QZ_EXTRA = [{"category":"Physics","desc":"Wave properties, sound, frequency, pitch and echoes.","emoji":"🔊","id":"b_waves","title":"Waves & Sound","questions":[{"q":"Sound cannot travel through which of these?","a":["Water","Steel","A vacuum","Air"],"c":2},{"q":"The pitch of a sound is determined mainly by its:","a":["Amplitude","Frequency","Speed","Loudness"],"c":1},{"q":"A louder sound wave has a greater:","a":["Amplitude","Wavelength","Frequency","Period"],"c":0},{"q":"An echo is produced when sound waves are:","a":["Absorbed by a surface","Refracted by air","Sped up by a wall","Reflected off a surface"],"c":3},{"q":"What is the approximate speed of sound in air at room temperature?","a":["3 m/s","340 m/s","3,000 m/s","300,000 km/s"],"c":1},{"q":"Which unit is used to measure frequency?","a":["Hertz (Hz)","Decibel (dB)","Metre (m)","Watt (W)"],"c":0},{"q":"The typical range of human hearing is about:","a":["2 Hz to 200 Hz","200 Hz to 2,000 Hz","20 Hz to 20,000 Hz","20,000 Hz to 200,000 Hz"],"c":2},{"q":"Sound waves in air are an example of which type of wave?","a":["Transverse","Electromagnetic","Surface","Longitudinal"],"c":3},{"q":"A wave has a frequency of 200 Hz and a wavelength of 1.5 m. What is its speed?","a":["133 m/s","300 m/s","201.5 m/s","3,000 m/s"],"c":1},{"q":"You shout at a cliff and hear the echo 2 seconds later. If sound travels at 340 m/s, how far away is the cliff?","a":["340 m","680 m","170 m","85 m"],"c":0}]},{"id":"b_electricity","title":"Electricity & Magnetism","emoji":"⚡","category":"Physics","desc":"Circuits, current, voltage, magnets and fields.","questions":[{"q":"What is electric current?","a":["The flow of electric charge","The storage of energy in a battery","The resistance of a wire","The brightness of a bulb"],"c":0},{"q":"Which unit is used to measure electric current?","a":["Volt","Ampere","Ohm","Watt"],"c":1},{"q":"Which material is a good conductor of electricity?","a":["Rubber","Glass","Copper","Plastic"],"c":2},{"q":"What happens if you bring the north poles of two magnets together?","a":["They attract each other","Nothing happens","They lose their magnetism","They repel each other"],"c":3},{"q":"In a circuit diagram, what does a battery provide?","a":["Resistance","Voltage","Magnetism","Insulation"],"c":1},{"q":"In a series circuit with two bulbs, what happens if one bulb burns out?","a":["Both bulbs go out","The other bulb gets brighter","The other bulb stays the same","The battery recharges"],"c":0},{"q":"Which device is used to measure voltage in a circuit?","a":["Ammeter","Thermometer","Voltmeter","Barometer"],"c":2},{"q":"According to Ohm's law, what is the current through a 6-ohm resistor connected to a 12-volt battery?","a":["72 A","0.5 A","6 A","2 A"],"c":3},{"q":"What can make an electromagnet stronger?","a":["Adding more turns of wire to the coil","Using thinner batteries","Removing the iron core","Using plastic wire instead of copper"],"c":0},{"q":"A generator produces electricity by which process?","a":["Static discharge","Electromagnetic induction","Chemical reaction","Nuclear fusion"],"c":1}]},{"category":"Physics","desc":"Gravity, planetary motion, satellites and tides.","emoji":"🪐","id":"b_space2","title":"Gravity & Orbits","questions":[{"q":"What force keeps the Moon in orbit around the Earth?","a":["Magnetism","Gravity","Friction","Air pressure"],"c":1},{"q":"If you dropped a hammer on the Moon, it would fall more slowly than on Earth because the Moon has...","a":["Weaker gravity","No sunlight","Colder rocks","A slower spin"],"c":0},{"q":"What mainly causes ocean tides on Earth?","a":["Wind blowing over the sea","Earthquakes on the sea floor","The Moon's gravitational pull","Heat from the Sun warming the water"],"c":2},{"q":"Which quantity stays the same for an astronaut who travels from Earth to the Moon?","a":["Weight","The force of gravity pulling on them","How high they can jump","Mass"],"c":3},{"q":"Why do planets closer to the Sun take less time to complete one orbit?","a":["They travel shorter paths and move faster","They are smaller than outer planets","They are hotter, which speeds them up","The Sun pushes them along"],"c":0},{"q":"Astronauts on the International Space Station float because they are...","a":["Beyond the reach of Earth's gravity","Held up by the station's engines","In constant free fall around the Earth","Lifted by air inside the station"],"c":2},{"q":"A geostationary satellite appears fixed over one spot on the equator because it...","a":["Hovers using thrusters","Completes one orbit in the same time Earth takes to rotate once","Is attached to a very long cable","Orbits the Moon instead of the Earth"],"c":1},{"q":"According to Newton, the gravitational force between two objects gets stronger when...","a":["The objects move faster","The objects become hotter","The objects spin more quickly","The objects have more mass or are closer together"],"c":3},{"q":"If the distance between two objects doubles, the gravitational force between them becomes...","a":["Half as strong","One quarter as strong","Twice as strong","Unchanged"],"c":1},{"q":"Kepler discovered that a planet's orbit around the Sun is shaped like...","a":["An ellipse with the Sun at one focus","A perfect circle with the Sun at the center","A spiral that slowly winds inward","A square with rounded corners"],"c":0}]},{"category":"Physics","desc":"Energy forms, transfer, conservation and temperature.","emoji":"🔥","id":"b_energy","title":"Energy & Heat","questions":[{"q":"What kind of energy does a moving car have because of its motion?","a":["Chemical energy","Kinetic energy","Nuclear energy","Sound energy"],"c":1},{"q":"A book resting on a high shelf has stored energy because of its position. What is this energy called?","a":["Gravitational potential energy","Kinetic energy","Electrical energy","Thermal energy"],"c":0},{"q":"Which unit is used to measure energy?","a":["Watt","Newton","Joule","Volt"],"c":2},{"q":"Heat always flows naturally from...","a":["a cold object to a hot object","a large object to a small object","a light object to a heavy object","a hot object to a cold object"],"c":3},{"q":"A metal spoon left in hot soup gets hot at the handle. Which type of heat transfer is this?","a":["Conduction","Convection","Radiation","Evaporation"],"c":0},{"q":"Warm air rising above a heater and cooler air sinking to replace it is an example of...","a":["Radiation","Convection","Conduction","Reflection"],"c":1},{"q":"How does the Sun's energy reach Earth through empty space?","a":["Conduction","Convection","Radiation","Sound waves"],"c":2},{"q":"What does the law of conservation of energy state?","a":["Energy slowly disappears as it is used","Energy can be created but not destroyed","Energy can only exist as heat","Energy cannot be created or destroyed, only transformed"],"c":3},{"q":"Temperature is a measure of which property of the particles in a substance?","a":["Their total mass","Their average kinetic energy","Their total volume","Their chemical energy"],"c":1},{"q":"A 100 g cup of water and a 1 kg bucket of water are both at 50 °C. Which statement is correct?","a":["The bucket stores more thermal energy, but both have the same temperature","The cup stores more thermal energy because it heats up faster","Both store exactly the same thermal energy","The bucket has a higher temperature because it has more water"],"c":0}]},{"id":"b_genetics","title":"Genetics & DNA","emoji":"🧬","category":"Biology","desc":"DNA, genes, inheritance and traits.","questions":[{"q":"Which molecule stores the genetic instructions in living things?","a":["Protein","DNA","Fat","Sugar"],"c":1},{"q":"What does the abbreviation DNA stand for?","a":["Deoxyribonucleic acid","Dinucleic acid","Double nuclear acid","Deoxyribose amino acid"],"c":0},{"q":"What is the shape of a DNA molecule?","a":["A single straight line","A flat ring","A double helix","A branching tree"],"c":2},{"q":"What is a gene?","a":["A whole cell","A type of protein","A section of cell membrane","A segment of DNA that codes for a trait"],"c":3},{"q":"In which part of a human cell is most DNA found?","a":["The cell wall","The nucleus","The ribosome","The cytoplasm only"],"c":1},{"q":"Which of these is one of the four bases in DNA?","a":["Lysine","Glucose","Guanine","Ribose"],"c":2},{"q":"In DNA, the base adenine (A) always pairs with which base?","a":["Thymine (T)","Guanine (G)","Cytosine (C)","Another adenine (A)"],"c":0},{"q":"How many chromosomes are found in a normal human body cell?","a":["23","24","48","46"],"c":3},{"q":"A dominant allele is one that:","a":["Only appears in males","Shows its effect even when paired with a recessive allele","Is always harmful","Is never passed to offspring"],"c":1},{"q":"The term 'phenotype' refers to an organism's:","a":["Set of alleles it carries","Number of chromosomes","Observable physical traits","Total amount of DNA"],"c":2}]},{"id":"b_bodysys","title":"Body Systems","emoji":"🫀","category":"Biology","desc":"Circulatory, respiratory, digestive and nervous systems.","questions":[{"q":"Which organ pumps blood around the body?","a":["The lungs","The heart","The stomach","The liver"],"c":1},{"q":"Which gas does the body absorb from the air in the lungs when you breathe in?","a":["Oxygen","Carbon dioxide","Nitrogen","Hydrogen"],"c":0},{"q":"Where does most digestion and absorption of nutrients take place?","a":["The stomach","The large intestine","The small intestine","The esophagus"],"c":2},{"q":"Which organ is the control center of the nervous system?","a":["The heart","The brain","The kidney","The lungs"],"c":1},{"q":"What are the tiny air sacs in the lungs where gas exchange happens called?","a":["Alveoli","Nephrons","Villi","Neurons"],"c":0},{"q":"Which type of blood vessel carries blood away from the heart?","a":["Veins","Capillaries","Arteries","Nerves"],"c":2},{"q":"Which component of blood carries oxygen to the body's cells?","a":["White blood cells","Platelets","Plasma","Red blood cells"],"c":3},{"q":"What is the basic cell of the nervous system that carries electrical signals?","a":["Neuron","Alveolus","Villus","Platelet"],"c":0},{"q":"Which muscle contracts and flattens to help pull air into the lungs?","a":["The biceps","The diaphragm","The heart","The tongue"],"c":1},{"q":"In which chamber does oxygen-rich blood from the lungs first enter the heart?","a":["Right ventricle","Right atrium","Left ventricle","Left atrium"],"c":3}]},{"id":"b_ecology","title":"Ecology & Environment","emoji":"🌍","category":"Biology","desc":"Food chains, ecosystems, cycles and conservation.","questions":[{"q":"In a food chain, which organism makes its own food?","a":["Lion","Rabbit","Grass","Mushroom"],"c":2},{"q":"An animal that eats only plants is called a...","a":["Herbivore","Carnivore","Omnivore","Decomposer"],"c":0},{"q":"The arrows in a food chain diagram show the flow of...","a":["Water","Air","Soil","Energy"],"c":3},{"q":"Which organisms break down dead plants and animals?","a":["Producers","Decomposers","Consumers","Herbivores"],"c":1},{"q":"Green plants make food using sunlight in a process called...","a":["Respiration","Digestion","Photosynthesis","Evaporation"],"c":2},{"q":"In the water cycle, when water turns into vapour and rises into the air, this is...","a":["Evaporation","Condensation","Precipitation","Freezing"],"c":0},{"q":"In the chain grass → grasshopper → frog → snake, which is the top predator?","a":["Grasshopper","Snake","Frog","Grass"],"c":1},{"q":"Which of these is a renewable resource?","a":["Coal","Oil","Natural gas","Sunlight"],"c":3},{"q":"Nitrogen-fixing bacteria, which turn nitrogen gas into a form plants can use, live mainly in...","a":["The root nodules of legume plants","The stomachs of cows","The surface of the ocean","Dry desert sand"],"c":0},{"q":"Roughly how much of the energy at one trophic level passes to the next level up?","a":["100%","50%","25%","10%"],"c":3}]},{"id":"b_atoms","title":"Atoms & Elements","emoji":"⚛️","category":"Chemistry","desc":"Atomic structure, elements and the periodic table.","questions":[{"q":"Which particle in an atom carries a negative charge?","a":["Proton","Neutron","Electron","Nucleus"],"c":2},{"q":"What is the chemical symbol for oxygen?","a":["O","Ox","Og","Om"],"c":0},{"q":"Where are protons and neutrons found in an atom?","a":["In the outer shells","In the nucleus","Spread evenly through the atom","Orbiting the electrons"],"c":1},{"q":"What does the atomic number of an element tell you?","a":["The number of neutrons","The number of electron shells","The total mass of the atom","The number of protons"],"c":3},{"q":"Which element has the symbol Na?","a":["Nitrogen","Sodium","Neon","Nickel"],"c":1},{"q":"An atom has 6 protons, 6 neutrons and 6 electrons. Which element is it?","a":["Carbon","Oxygen","Nitrogen","Boron"],"c":0},{"q":"Two atoms of the same element with different numbers of neutrons are called what?","a":["Ions","Molecules","Isotopes","Compounds"],"c":2},{"q":"In the periodic table, elements in the same vertical column (group) share what?","a":["The same number of neutrons","The same atomic mass","The same number of protons","Similar chemical properties"],"c":3},{"q":"An atom of aluminium has an atomic number of 13 and a mass number of 27. How many neutrons does it have?","a":["13","14","27","40"],"c":1},{"q":"A neutral atom loses one electron. What is its overall charge now?","a":["+1","-1","0","+2"],"c":0}]},{"category":"Chemistry","desc":"Reaction types, equations, acids/bases and energy changes.","emoji":"🧪","id":"b_reactions","title":"Chemical Reactions","questions":[{"q":"Which of these is a sign that a chemical reaction has taken place?","a":["Ice melting into water","A gas being produced with a color change","Sugar dissolving in tea","Water evaporating from a puddle"],"c":1},{"q":"In the equation 2H2 + O2 → 2H2O, what are H2 and O2 called?","a":["Reactants","Products","Catalysts","Solvents"],"c":0},{"q":"What type of reaction is iron combining with oxygen to form rust (iron oxide)?","a":["Decomposition","Neutralization","Combination (synthesis)","Displacement"],"c":2},{"q":"A reaction that releases heat to the surroundings is called:","a":["Endothermic","Reversible","Catalytic","Exothermic"],"c":3},{"q":"What is the pH of a neutral solution like pure water at 25°C?","a":["0","7","14","1"],"c":1},{"q":"When an acid reacts with a base, the products are:","a":["A salt and water","Hydrogen gas only","Carbon dioxide only","Two new acids"],"c":0},{"q":"Heating calcium carbonate breaks it into calcium oxide and carbon dioxide. What type of reaction is this?","a":["Synthesis","Combustion","Decomposition","Neutralization"],"c":2},{"q":"What does a catalyst do in a chemical reaction?","a":["Gets used up to make products","Speeds up the reaction without being consumed","Changes the products that form","Stops the reaction completely"],"c":1},{"q":"Why must a chemical equation be balanced?","a":["To make the reaction exothermic","Because products always weigh more than reactants","To make the reaction happen faster","Because atoms are conserved — none are created or destroyed"],"c":3},{"q":"In the reaction Zn + CuSO4 → ZnSO4 + Cu, what happens?","a":["Zinc displaces copper because zinc is more reactive","Copper displaces zinc because copper is more reactive","The two metals combine into an alloy","Sulfate decomposes into sulfur and oxygen"],"c":0}]},{"category":"Chemistry","desc":"Solids, liquids, gases, phase changes and particles.","emoji":"🧊","id":"b_states","title":"States of Matter","questions":[{"q":"Which state of matter has a fixed shape and a fixed volume?","a":["Gas","Liquid","Solid","Plasma"],"c":2},{"q":"What is the process called when a liquid changes into a gas?","a":["Evaporation","Condensation","Freezing","Melting"],"c":0},{"q":"In most substances, in which state of matter are the particles packed closest together?","a":["Gas","Liquid","Solid","They are equally spaced in all states"],"c":2},{"q":"What happens to water at 0 degrees Celsius when heat is removed?","a":["It boils","It freezes into ice","It evaporates","It turns into vapour"],"c":1},{"q":"Which change of state happens when water vapour touches a cold window and forms droplets?","a":["Melting","Sublimation","Evaporation","Condensation"],"c":3},{"q":"Why can a gas be compressed easily but a liquid cannot?","a":["Gas particles have large spaces between them","Gas particles are heavier","Liquid particles do not move","Gas particles are stuck together tightly"],"c":0},{"q":"Dry ice (solid carbon dioxide) turns directly into a gas without melting. What is this process called?","a":["Condensation","Sublimation","Deposition","Evaporation"],"c":1},{"q":"What happens to the movement of particles in a substance when it is heated?","a":["They stop moving","They move more slowly","They move faster","They shrink in size"],"c":2},{"q":"While a pure substance is melting, what happens to its temperature?","a":["It rises steadily","It falls steadily","It rises then falls","It stays constant"],"c":3},{"q":"Water boils at 100 degrees Celsius at sea level. What happens to its boiling point high on a mountain, where air pressure is lower?","a":["It is lower than 100 degrees Celsius","It is higher than 100 degrees Celsius","It stays exactly 100 degrees Celsius","Water cannot boil at high altitude"],"c":0}]},{"category":"Computer Science","desc":"Sorting, searching, data structures and efficiency.","emoji":"🧮","id":"b_algorithms","title":"Algorithms & Data","questions":[{"q":"What is an algorithm?","a":["A step-by-step set of instructions to solve a problem","A type of computer chip","A programming language","A file that stores pictures"],"c":0},{"q":"Which of these puts a list of numbers in order from smallest to largest?","a":["Searching","Compressing","Sorting","Encrypting"],"c":2},{"q":"Linear search finds an item in a list by doing what?","a":["Jumping straight to the middle of the list","Checking each item one by one from the start","Sorting the list first, then guessing","Checking only the last item"],"c":1},{"q":"Binary search only works correctly if the list is:","a":["Very short","Full of unique pictures","Stored on the internet","Already sorted"],"c":3},{"q":"A stack is a data structure where the item removed first is the one that was:","a":["Added last (Last In, First Out)","Added first (First In, First Out)","The largest value","Chosen at random"],"c":0},{"q":"A queue works like a line at a shop. Which rule does it follow?","a":["Last In, First Out","First In, First Out","Biggest item leaves first","Items never leave"],"c":1},{"q":"Bubble sort works by repeatedly doing what?","a":["Splitting the list in half again and again","Picking a random item and hoping it is in place","Comparing neighbouring items and swapping them if they are in the wrong order","Deleting the largest item until the list is empty"],"c":2},{"q":"With binary search, at most how many comparisons are needed to find an item in a sorted list of 1000 items?","a":["1000","500","100","About 10"],"c":3},{"q":"Which of these describes an algorithm whose running time grows fastest as the input size n gets large?","a":["O(n^2)","O(n)","O(log n)","O(1)"],"c":0},{"q":"Why is looking up a value by its key in a hash table usually very fast?","a":["The table checks every entry one by one","All values are stored in sorted order and searched from the end","The key is converted by a hash function directly into the location where the value is stored","The computer memorises every question it has been asked before"],"c":2}]},{"id":"b_proglogic","title":"Programming Logic","emoji":"💻","category":"Computer Science","desc":"Variables, loops, conditions, binary and debugging.","questions":[{"q":"In programming, what is a variable?","a":["A named container that stores a value","A type of computer screen","An error in the code","A picture in a program"],"c":0},{"q":"What does a loop do in a program?","a":["Deletes the program","Stops the computer","Repeats a block of instructions","Prints the code on paper"],"c":2},{"q":"An 'if' statement runs its code only when...","a":["the program has finished","its condition is true","the computer restarts","a loop has ended"],"c":1},{"q":"What is a 'bug' in programming?","a":["A tool for writing code","A fast part of the program","A file that stores data","A mistake that makes a program behave incorrectly"],"c":3},{"q":"Binary numbers use only which digits?","a":["0 and 1","1 and 2","0 through 9","0, 1 and 2"],"c":0},{"q":"After running: x = 5, then x = x + 3, what is the value of x?","a":["5","3","8","53"],"c":2},{"q":"How many times does this loop print? 'repeat 4 times: print(\"Hi\")'","a":["1","4","3","5"],"c":1},{"q":"What is an infinite loop?","a":["A loop that runs exactly once","A loop that counts backwards","A loop with no code inside","A loop whose stopping condition is never met, so it never ends"],"c":3},{"q":"What is the decimal value of the binary number 101?","a":["3","5","101","7"],"c":1},{"q":"A loop should print numbers 1 to 10 but stops at 9 because it uses 'while n < 10'. What kind of error is this?","a":["An off-by-one error","A hardware failure","A syntax error","A binary error"],"c":0}]}];
     </script>
 </body>
 </html>
