@@ -14930,6 +14930,35 @@ function drawPeriodicTrends(ctx, canvas) {
             throw { msg: lastMsg + ' — none of the Gemini models responded.' };
         }
 
+        // Keyless inline tutor: a free, CORS-enabled AI text service — no API key, no new tab.
+        async function callFreeAI() {
+            const messages = [{ role: 'system', content: aiSystemPrompt() }].concat(
+                aiMessages.filter(m => !m.err).slice(-10).map(m => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.text }))
+            );
+            let res;
+            try {
+                res = await fetch('https://text.pollinations.ai/openai', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model: 'openai', messages: messages, private: true, referrer: 'science-playground' })
+                });
+            } catch (e) {
+                throw { msg: 'Could not reach the AI service — check your internet connection and try again.' };
+            }
+            if (!res.ok) {
+                if (res.status === 429) throw { msg: 'The free AI tutor is busy right now — wait a few seconds and ask again.' };
+                throw { msg: 'The AI service is unavailable right now (HTTP ' + res.status + ') — please try again shortly.' };
+            }
+            const raw = await res.text();
+            let text = '';
+            try {
+                const d = JSON.parse(raw);
+                text = (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || d.response || d.text || d.content || '';
+            } catch (e) { text = raw; }   // the endpoint may return plain text instead of JSON
+            text = String(text || '').trim();
+            if (!text) throw { msg: 'The AI returned an empty answer — try rephrasing your question.' };
+            return text;
+        }
+
         function aiPanelEl() {
             let p = document.getElementById('aiPanel');
             if (!p) {
@@ -14939,9 +14968,8 @@ function drawPeriodicTrends(ctx, canvas) {
                 p.onclick = e => { if (e.target === p) closeAiPanel(); };
                 p.innerHTML =
                     '<div class="ai-box" role="dialog" aria-modal="true" aria-label="AI Tutor">' +
-                        '<div class="ai-head"><span>🤖 AI Tutor<small>powered by Google AI</small></span>' +
+                        '<div class="ai-head"><span>🤖 AI Tutor<small>ask anything — no setup</small></span>' +
                             '<span class="ai-head-btns">' +
-                                '<button onclick="aiShowSetup()" title="API key settings">⚙️</button>' +
                                 '<button onclick="closeAiPanel()" aria-label="Close">✕</button>' +
                             '</span></div>' +
                         '<div class="ai-ctx" id="aiCtx"></div>' +
@@ -14962,8 +14990,7 @@ function drawPeriodicTrends(ctx, canvas) {
             const p = aiPanelEl();
             p.classList.add('show');
             document.getElementById('aiCtx').textContent = aiContextLine();
-            if (!aiProvider()) { aiShowSetup(); return; }
-            aiShowChat();
+            aiShowChat();   // keyless — the tutor answers with no setup
         }
         function closeAiPanel() { const p = document.getElementById('aiPanel'); if (p) p.classList.remove('show'); }
         function aiShowChat() {
@@ -14973,38 +15000,7 @@ function drawPeriodicTrends(ctx, canvas) {
             aiRender();
             setTimeout(() => { const i = document.getElementById('aiInput'); if (i) i.focus(); }, 30);
         }
-        function aiShowSetup(errMsg) {
-            const s = document.getElementById('aiSetup');
-            document.getElementById('aiMsgs').style.display = 'none';
-            document.getElementById('aiInRow').style.display = 'none';
-            s.style.display = 'block';
-            s.innerHTML =
-                '<h3>Connect Google AI</h3>' +
-                '<p style="margin:0 0 12px">The AI Tutor answers your questions <b>right here in the app</b>, powered by <b>Google\'s Gemini AI</b>. Because Science Playground is a single file with no server of its own, it needs your own free Google API key to reach Google\'s AI — the key is saved <b>only in this browser</b> and is sent only to Google.</p>' +
-                '<div style="background:rgba(102,126,234,0.10);border-radius:12px;padding:14px">' +
-                    '<ol style="margin:4px 0 10px"><li>Open <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> (free Google account)</li>' +
-                    '<li>Click <b>Create API key</b> and copy it</li>' +
-                    '<li>Paste it below — then just ask; answers appear in the chat.</li></ol>' +
-                    '<div class="ai-key-row">' +
-                        '<input type="password" class="ai-key-in" id="aiKeyInput" placeholder="Paste your Gemini API key (AIza…)" value="' + aiKey().replace(/"/g, '&quot;') + '">' +
-                        '<button class="ai-send" onclick="saveAiKey()">Save</button>' +
-                    '</div>' +
-                '</div>' +
-                (aiKey() ? '<div class="ai-setup-note"><a href="javascript:void(0)" onclick="setAiKeyStored(\'\');setAiProvider(\'\');aiShowSetup()">Remove saved key</a> · <a href="javascript:void(0)" onclick="aiShowChat()">Back to chat</a></div>' : '') +
-                (errMsg ? '<div class="ai-setup-err">⚠️ ' + aiEsc(errMsg) + '</div>' : '') +
-                '<div class="ai-setup-note">Nothing touches this app\'s servers (there are none — it\'s a single-file app). Every question goes straight from your browser to Google and the answer comes back into this chat.</div>';
-            const inp = document.getElementById('aiKeyInput');
-            inp.onkeydown = e => { if (e.key === 'Enter') saveAiKey(); };
-            setTimeout(() => inp.focus(), 30);
-        }
-        function saveAiKey() {
-            const inp = document.getElementById('aiKeyInput');
-            const v = (inp.value || '').trim();
-            if (v.length < 20) { inp.style.borderColor = '#e53e3e'; inp.focus(); return; }
-            setAiKeyStored(v);
-            setAiProvider('gemini');
-            aiShowChat();
-        }
+        // (The AI Tutor is keyless — it never asks for an API key. The old key-setup screen was removed.)
         function aiEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
         function aiFmt(s) {
             return aiEsc(s)
@@ -15040,19 +15036,19 @@ function drawPeriodicTrends(ctx, canvas) {
             if (!q) return;
             inp.value = '';
             aiMessages.push({ role: 'user', text: q });
-            // No new tab — the answer is fetched from Google's Gemini API and shown inline below.
-            if (!aiKey()) { aiShowSetup('Add your free Google AI key to get answers in the app.'); aiMessages.pop(); return; }
+            // Keyless & inline: answers come from a free AI service (no API key, no new tab).
+            // If the user happens to have saved a Google key earlier, we quietly use that instead.
             aiBusy = true; aiRender();
             try {
-                const answer = await callGemini();
+                let answer;
+                if (aiKey()) {
+                    try { answer = await callGemini(); }
+                    catch (ge) { if (ge && ge.badKey) { setAiKeyStored(''); answer = await callFreeAI(); } else throw ge; }
+                } else {
+                    answer = await callFreeAI();
+                }
                 aiMessages.push({ role: 'model', text: answer });
             } catch (e) {
-                if (e && e.badKey) {
-                    aiBusy = false;
-                    aiShowSetup('Google AI rejected the key: ' + (e.msg || 'invalid key') + ' — paste a valid key.');
-                    aiMessages.pop();   // let the student re-ask after fixing the key
-                    return;
-                }
                 aiMessages.push({ role: 'model', err: true, text: '⚠️ ' + ((e && e.msg) || 'Something went wrong — please try again.') });
             }
             aiBusy = false;
