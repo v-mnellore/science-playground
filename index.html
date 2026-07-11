@@ -10271,7 +10271,9 @@ function drawCaesarCipher(ctx, c){
             tpose: { shoulderL: [0, 0, 78], shoulderR: [0, 0, -78] },
             wave: { shoulderR: [0, 0, -150], elbowR: [0, 20, -55], shoulderL: [0, 0, 12], head: [0, -14, 0] },
             sit: { hipL: [-92, 0, 4], hipR: [-92, 0, -4], kneeL: [96, 0, 0], kneeR: [96, 0, 0], chest: [8, 0, 0], shoulderL: [-14, 0, 10], shoulderR: [-14, 0, -10] },
-            run: { hipL: [42, 0, 0], kneeL: [-52, 0, 0], hipR: [-34, 0, 0], kneeR: [-84, 0, 0], shoulderL: [-38, 0, 10], elbowL: [0, 0, 74], shoulderR: [40, 0, -10], elbowR: [0, 0, -74], chest: [12, 6, 0], head: [-6, 0, 0] }
+            run: { hipL: [42, 0, 0], kneeL: [-52, 0, 0], hipR: [-34, 0, 0], kneeR: [-84, 0, 0], shoulderL: [-38, 0, 10], elbowL: [0, 0, 74], shoulderR: [40, 0, -10], elbowR: [0, 0, -74], chest: [12, 6, 0], head: [-6, 0, 0] },
+            // martial-arts guard: both fists raised, torso squared, wide braced legs
+            fight: { shoulderR: [-80, 0, -16], elbowR: [0, 0, -104], shoulderL: [-80, 0, 16], elbowL: [0, 0, 104], hipR: [16, -18, -16], kneeR: [-40, 0, 0], hipL: [-30, 18, 16], kneeL: [-64, 0, 0], chest: [10, 0, 0], head: [-4, 0, 0] }
         };
         const AN_D2R = Math.PI / 180;
 
@@ -10312,7 +10314,7 @@ function drawCaesarCipher(ctx, c){
         function anaRenderSide() {
             const side = document.getElementById('anaSide'); if (!side) return;
             let h = '<div class="an-side-h">Poses</div><div class="af-top" style="gap:6px;margin:0">';
-            [['relax', '🧍 Relax'], ['tpose', '✝ T-pose'], ['wave', '👋 Wave'], ['sit', '🪑 Sit'], ['run', '🏃 Run']].forEach(p => {
+            [['relax', '🧍 Relax'], ['fight', '🥋 Fight'], ['tpose', '✝ T-pose'], ['wave', '👋 Wave'], ['sit', '🪑 Sit'], ['run', '🏃 Run']].forEach(p => {
                 h += '<button class="an-chipbtn" data-pose="' + p[0] + '">' + p[1] + '</button>';
             });
             h += '<button class="an-chipbtn" id="anaAnim" data-anim="1">▶ Animate walk</button></div>';
@@ -10334,7 +10336,7 @@ function drawCaesarCipher(ctx, c){
         function anaRenderSliders() {
             const box = document.getElementById('anaSliders'); if (!box) return;
             const j = ANA.three && ANA.three.joints[ANA.sel];
-            const rot = j ? [j.rotation.x, j.rotation.y, j.rotation.z].map(v => Math.round(v / AN_D2R)) : [0, 0, 0];
+            const rot = j ? [j.userData.tx, j.userData.ty, j.userData.tz].map(v => Math.round((v || 0) / AN_D2R)) : [0, 0, 0];
             const lbl = ['Bend', 'Twist', 'Splay'];
             box.innerHTML = ['x', 'y', 'z'].map((ax, i) =>
                 '<div class="an-srow"><label>' + lbl[i] + '</label>' +
@@ -10343,7 +10345,7 @@ function drawCaesarCipher(ctx, c){
             box.querySelectorAll('input').forEach(inp => inp.oninput = () => {
                 const ax = +inp.getAttribute('data-ax'), deg = +inp.value;
                 const jt = ANA.three && ANA.three.joints[ANA.sel]; if (!jt) return;
-                jt.rotation['xyz'[ax]] = deg * AN_D2R;
+                jt.userData['t' + 'xyz'[ax]] = deg * AN_D2R;   // eases to target for smooth motion
                 document.getElementById('anaV' + ax).textContent = deg + '°';
                 if (ANA.anim) anaToggleAnim();   // manual edit cancels the walk
             });
@@ -10381,13 +10383,14 @@ function drawCaesarCipher(ctx, c){
                 m.material.emissiveIntensity = on ? 0.55 : (m.userData.baseInt || 0);
             });
         }
-        function anaApplyPose(name, keepAnim) {
+        function anaApplyPose(name, keepAnim, instant) {
             if (!keepAnim && ANA.anim) anaToggleAnim();
             const pose = ANA_POSES[name] || {};
             if (ANA.three) ANA_POSABLE.forEach(j => {
                 const jt = ANA.three.joints[j[0]]; if (!jt) return;
                 const r = pose[j[0]] || [0, 0, 0];
-                jt.rotation.set(r[0] * AN_D2R, r[1] * AN_D2R, r[2] * AN_D2R);
+                jt.userData.tx = r[0] * AN_D2R; jt.userData.ty = r[1] * AN_D2R; jt.userData.tz = r[2] * AN_D2R;
+                if (instant) jt.rotation.set(jt.userData.tx, jt.userData.ty, jt.userData.tz);   // the figure glides to the target otherwise
             });
             anaRenderSliders();
             SFX.play('click');
@@ -10400,7 +10403,7 @@ function drawCaesarCipher(ctx, c){
         function anaWalk(t) {
             if (!ANA.three) return;
             const J = ANA.three.joints, s = Math.sin(t * 3.4), s2 = Math.sin(t * 3.4 + Math.PI);
-            const set = (n, x, y, z) => { const j = J[n]; if (j) j.rotation.set((x || 0) * AN_D2R, (y || 0) * AN_D2R, (z || 0) * AN_D2R); };
+            const set = (n, x, y, z) => { const j = J[n]; if (j) { j.userData.tx = (x || 0) * AN_D2R; j.userData.ty = (y || 0) * AN_D2R; j.userData.tz = (z || 0) * AN_D2R; } };
             set('hipL', 34 * s); set('hipR', 34 * s2);
             set('kneeL', -(28 + 28 * Math.sin(t * 3.4 + 0.5)) - 6);
             set('kneeR', -(28 + 28 * Math.sin(t * 3.4 + Math.PI + 0.5)) - 6);
@@ -10431,7 +10434,7 @@ function drawCaesarCipher(ctx, c){
             ground.position.y = -3.55; T.root.add(ground);
             anaBuildFigure(T);
             anaSetLayer(ANA.layer);
-            anaApplyPose('relax', true);
+            anaApplyPose('relax', true, true);   // snap the starting pose (no glide on first paint)
             anaHighlight();
         }
         function anaFallback() {
@@ -10451,7 +10454,7 @@ function drawCaesarCipher(ctx, c){
         // Build the articulated figure. Each joint is a Group at its pivot; bone meshes span to the child.
         function anaBuildFigure(T) {
             const V = (x, y, z) => new THREE.Vector3(x, y, z);
-            const joint = (parent, name, px, py, pz) => { const g = new THREE.Group(); g.position.set(px, py, pz); parent.add(g); T.joints[name] = g; return g; };
+            const joint = (parent, name, px, py, pz) => { const g = new THREE.Group(); g.position.set(px, py, pz); g.userData.tx = 0; g.userData.ty = 0; g.userData.tz = 0; parent.add(g); T.joints[name] = g; return g; };
             const stdEmis = 0x000000;
             // material factory that also records the mesh into a layer + tags it for highlight/pick
             const put = (group, mesh, layer, jointName, emis, emisInt) => {
@@ -10498,20 +10501,19 @@ function drawCaesarCipher(ctx, c){
                 const knobB = new THREE.Mesh(new THREE.SphereGeometry(r * 0.46, 12, 10), mat(0xeae3cf)); knobB.position.copy(vec); put(group, knobB, 'skeleton', jointName);
             }
 
-            // Anime "seifuku" palette — lilac hair, teal eyes, navy sailor uniform (from design synthesis)
-            const SKIN = 0xffe1cb, TOP = 0xf3f1f5, NAVY = 0x34406b, TIE = 0xe24e63, SKIRT = 0x34406b,
-                HAIR = 0xc9b6e4, HAIRSH = 0xa98fd0, HAIRHI = 0xebdcfb, SHOE = 0x5a3b2e, SOCK = 0xedebf2,
-                EYERIM = 0x167c93, EYEMID = 0x34b6c9, EYEGLOW = 0x9ee8f0, PUPIL = 0x202830, SCLERA = 0xfbf7fa,
-                WHITE = 0xffffff, LASH = 0x2b2233, BROW = 0x8a6fb5, BLUSH = 0xff9aa9, MOUTH = 0xb35a63;
+            // Goku-style martial-artist palette — orange gi, blue trim/sash/wristbands/boots, tan skin, black spiky hair
+            const SKIN = 0xefc095, GI = 0xe8541c, GIDARK = 0xc23f12, BLUE = 0x2e4b9e, BLUEHI = 0x4a6cc4,
+                HAIR = 0x16161f, HAIRHI = 0x333356, BOOT = 0x263a86, BOOTRED = 0xb83226, LACE = 0xe6d6a0,
+                EYE = 0x20222c, SCLERA = 0xf6f4ee, BROW = 0x16161f, MOUTH = 0xb5715a, WHITE = 0xffffff;
             // pelvis (root)
             const pelvis = joint(T.root, 'pelvis', 0, 0, 0);
             (function () {
                 const g = pelvis;
-                // hips (briefs, mostly hidden by skirt) + flared pleated skirt
-                const briefs = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.5, 0.6), mat(NAVY)); briefs.position.y = -0.18; put(g, briefs, 'skin', 'pelvis');
-                const skirt = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 1.0, 0.66, 14, 1, true), mat(SKIRT, { side: THREE.DoubleSide })); skirt.position.y = -0.32; skin(g, skirt, 'pelvis', { s: 1.04 });
-                // waistband
-                const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.52, 0.14, 16), mat(0x1b2450)); belt.position.y = 0.02; skin(g, belt, 'pelvis');
+                // orange gi pants at the hips + wide blue sash with a side knot & hanging tail
+                const hips = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.62, 0.78), mat(GI)); hips.position.y = -0.2; hips.scale.set(1, 1, 1); skin(g, hips, 'pelvis');
+                const sash = new THREE.Mesh(new THREE.CylinderGeometry(0.57, 0.59, 0.3, 18), mat(BLUE)); sash.position.y = 0.05; skin(g, sash, 'pelvis', { s: 1.03 });
+                const sashKnot = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.26, 0.18), mat(BLUEHI)); sashKnot.position.set(0.5, 0.0, 0.14); sashKnot.rotation.z = 0.3; skin(g, sashKnot, 'pelvis');
+                const sashTail = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.55, 0.09), mat(BLUE)); sashTail.position.set(0.53, -0.3, 0.14); sashTail.rotation.z = 0.12; skin(g, sashTail, 'pelvis');
                 // muscle glutes/abs
                 const glut = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 12), mat(0xd14848, { emissive: 0x330a08 })); glut.scale.set(0.6, 0.45, 0.55); glut.position.y = -0.2; put(g, glut, 'muscle', 'pelvis', 0x330a08, 0.25);
                 // bone pelvis bowl
@@ -10522,16 +10524,16 @@ function drawCaesarCipher(ctx, c){
             const chest = joint(pelvis, 'chest', 0, 0.5, 0);
             (function () {
                 const g = chest;
-                // white sailor top (fitted, slight waist) + sleeve ridge
-                const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.46, 0.56, 1.1, 22), mat(TOP)); torso.position.y = 0.55; skin(g, torso, 'chest');
-                const shoulders = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 1.36, 16), mat(TOP)); shoulders.rotation.z = Math.PI / 2; shoulders.position.y = 0.95; skin(g, shoulders, 'chest');
-                // navy sailor collar: flat cone yoke + squared back flap + white trim stripes
-                const collar = new THREE.Mesh(new THREE.ConeGeometry(0.6, 0.2, 22), mat(NAVY)); collar.position.y = 1.05; skin(g, collar, 'chest', { s: 1.04 });
-                const flap = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.42, 0.08), mat(NAVY)); flap.position.set(0, 0.96, -0.33); flap.rotation.x = -0.12; skin(g, flap, 'chest');
-                [0.5, 0.46].forEach(rad => { const st = new THREE.Mesh(new THREE.TorusGeometry(rad, 0.018, 6, 22, Math.PI * 1.1), mat(WHITE)); st.rotation.x = Math.PI / 2; st.rotation.z = -Math.PI * 0.55; st.position.y = 1.0; put(g, st, 'skin', 'chest'); });
-                // red neckerchief knot + tail
-                const knot = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), mat(TIE)); knot.position.set(0, 1.0, 0.42); skin(g, knot, 'chest', { s: 1.08 });
-                const tie = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.36, 4), mat(TIE)); tie.rotation.x = Math.PI; tie.position.set(0, 0.82, 0.42); skin(g, tie, 'chest', { s: 1.06 });
+                // orange sleeveless gi top over a muscular torso; bare tan deltoids; blue undershirt collar + armhole trim
+                const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.58, 1.02, 22), mat(GI)); torso.position.y = 0.5; skin(g, torso, 'chest');
+                const deltoids = new THREE.Mesh(new THREE.CylinderGeometry(0.21, 0.21, 1.44, 16), mat(SKIN)); deltoids.rotation.z = Math.PI / 2; deltoids.position.y = 0.98; skin(g, deltoids, 'chest');
+                // gi shoulder straps (orange over the deltoids)
+                for (const sx of [-1, 1]) { const strap = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.36, 0.52), mat(GI)); strap.position.set(sx * 0.4, 0.9, 0); strap.rotation.z = sx * 0.35; skin(g, strap, 'chest'); }
+                // blue undershirt V at the neck
+                const neckU = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.36, 0.36, 16), mat(BLUE)); neckU.position.y = 1.0; skin(g, neckU, 'chest', { s: 1.03 });
+                const vneck = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.28, 3), mat(BLUE)); vneck.rotation.x = Math.PI; vneck.position.set(0, 0.86, 0.36); put(g, vneck, 'skin', 'chest');
+                // blue armhole trim rings
+                for (const sx of [-1, 1]) { const ah = new THREE.Mesh(new THREE.TorusGeometry(0.235, 0.05, 8, 16), mat(BLUE)); ah.position.set(sx * 0.47, 0.74, 0); ah.rotation.y = Math.PI / 2; ah.rotation.z = 0.15; skin(g, ah, 'chest'); }
                 // muscle: pecs + abs
                 [[-0.22, 0.7, 0.25], [0.22, 0.7, 0.25]].forEach(p => { const pec = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), mat(0xd14848, { emissive: 0x330a08 })); pec.scale.set(0.28, 0.22, 0.2); pec.position.set(p[0], p[1], p[2]); put(g, pec, 'muscle', 'chest', 0x330a08, 0.25); });
                 [0.45, 0.2].forEach(y => [-0.14, 0.14].forEach(x => { const ab = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), mat(0xc94a4a, { emissive: 0x330a08 })); ab.scale.set(0.13, 0.12, 0.15); ab.position.set(x, y, 0.33); put(g, ab, 'muscle', 'chest', 0x330a08, 0.25); }));
@@ -10548,39 +10550,36 @@ function drawCaesarCipher(ctx, c){
                 // helpers for flat face/hair details (MeshBasic, never outlined, never highlighted)
                 const basic = (c, o) => new THREE.MeshBasicMaterial(Object.assign({ color: c }, o || {}));
                 const putB = (mesh, jn) => { mesh.userData = { joint: jn, layer: 'skin', baseEmis: 0, baseInt: 0 }; g.add(mesh); T.layers.skin.push(mesh); T.meshes.push(mesh); };
-                // neck + egg-shaped head + soft chin
-                const neck = mk(new THREE.CylinderGeometry(0.16, 0.19, 0.34, 14), SKIN); neck.position.y = 0.16; skin(g, neck, 'head');
-                const skull = mk(new THREE.SphereGeometry(0.68, 24, 20), SKIN); skull.scale.set(0.96, 1.08, 0.97); skull.position.y = 1.0; skin(g, skull, 'head');
-                const chin = mk(new THREE.ConeGeometry(0.24, 0.3, 18), SKIN); chin.position.set(0, 0.55, 0.06); chin.rotation.x = Math.PI; chin.scale.set(1, 1, 0.7); skin(g, chin, 'head', { s: 1.04 });
-                // ears + inner concha
-                for (const x of [-0.6, 0.6]) {
-                    const ear = mk(new THREE.SphereGeometry(0.11, 10, 8), SKIN); ear.scale.set(0.55, 1.05, 0.75); ear.position.set(x, 0.94, 0.02); skin(g, ear, 'head', { s: 1.08 });
-                    const inner = mk(new THREE.SphereGeometry(0.06, 8, 6), 0xf0b3a2); inner.scale.set(0.5, 1, 0.6); inner.position.set(x * 0.96, 0.94, 0.06); put(g, inner, 'skin', 'head');
+                // neck + head with a squarer male jaw
+                const neck = mk(new THREE.CylinderGeometry(0.19, 0.21, 0.34, 14), SKIN); neck.position.y = 0.16; skin(g, neck, 'head');
+                const skull = mk(new THREE.SphereGeometry(0.66, 24, 20), SKIN); skull.scale.set(0.99, 1.04, 0.98); skull.position.y = 1.0; skin(g, skull, 'head');
+                const jawS = mk(new THREE.BoxGeometry(0.6, 0.42, 0.56), SKIN); jawS.position.set(0, 0.66, 0.01); skin(g, jawS, 'head', { s: 1.03 });
+                // ears
+                for (const x of [-0.58, 0.58]) {
+                    const ear = mk(new THREE.SphereGeometry(0.1, 10, 8), SKIN); ear.scale.set(0.5, 1.0, 0.7); ear.position.set(x, 0.92, 0.02); skin(g, ear, 'head', { s: 1.08 });
+                    const inner = mk(new THREE.SphereGeometry(0.055, 8, 6), 0xd89a78); inner.scale.set(0.5, 1, 0.6); inner.position.set(x * 0.96, 0.92, 0.05); put(g, inner, 'skin', 'head');
                 }
-                // BIG low anime eyes — layered teal iris + catchlights + upper lash + brow (no outlines)
-                for (const x of [-0.25, 0.25]) {
-                    const sc = mk(new THREE.SphereGeometry(1, 20, 16), SCLERA); sc.scale.set(0.16, 0.205, 0.06); sc.position.set(x, 0.9, 0.56); put(g, sc, 'skin', 'head');
-                    const rim = mk(new THREE.SphereGeometry(1, 18, 14), EYERIM); rim.scale.set(0.125, 0.165, 0.06); rim.position.set(x, 0.888, 0.585); put(g, rim, 'skin', 'head');
-                    const midi = mk(new THREE.SphereGeometry(1, 16, 12), EYEMID); midi.scale.set(0.1, 0.135, 0.06); midi.position.set(x, 0.884, 0.6); put(g, midi, 'skin', 'head');
-                    const glow = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), basic(EYEGLOW)); glow.scale.set(0.06, 0.08, 0.04); glow.position.set(x, 0.86, 0.61); putB(glow, 'head');
-                    const pup = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 12), basic(PUPIL)); pup.scale.set(0.052, 0.088, 0.05); pup.position.set(x, 0.885, 0.62); putB(pup, 'head');
-                    const cl1 = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), basic(0xffffff)); cl1.position.set(x + 0.05, 0.94, 0.635); putB(cl1, 'head');
-                    const cl2 = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), basic(0xffffff)); cl2.position.set(x - 0.03, 0.85, 0.63); putB(cl2, 'head');
-                    const lash = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.024, 8, 18, Math.PI), basic(LASH)); lash.scale.set(1, 1.15, 1); lash.position.set(x, 0.9, 0.575); putB(lash, 'head');
-                    const brow = mk(new THREE.BoxGeometry(0.2, 0.035, 0.045), BROW); brow.position.set(x, 1.06, 0.53); brow.rotation.z = x < 0 ? 0.12 : -0.12; put(g, brow, 'skin', 'head');
+                // stern male eyes: narrow, dark, sharp upper lid + thick angled brow (no outlines)
+                for (const x of [-0.24, 0.24]) {
+                    const sc = mk(new THREE.SphereGeometry(1, 18, 14), SCLERA); sc.scale.set(0.15, 0.1, 0.05); sc.position.set(x, 0.95, 0.56); put(g, sc, 'skin', 'head');
+                    const iris = mk(new THREE.SphereGeometry(1, 14, 12), EYE); iris.scale.set(0.075, 0.1, 0.05); iris.position.set(x, 0.945, 0.585); put(g, iris, 'skin', 'head');
+                    const cl = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), basic(0xffffff)); cl.position.set(x + 0.03, 0.985, 0.6); putB(cl, 'head');
+                    const lid = mk(new THREE.BoxGeometry(0.21, 0.055, 0.06), 0x2a2018); lid.position.set(x, 1.005, 0.55); lid.rotation.z = x < 0 ? -0.14 : 0.14; put(g, lid, 'skin', 'head');
+                    const brow = mk(new THREE.BoxGeometry(0.24, 0.055, 0.055), BROW); brow.position.set(x, 1.08, 0.53); brow.rotation.z = x < 0 ? -0.2 : 0.2; put(g, brow, 'skin', 'head');
                 }
-                // flat additive blush + ∪-smile mouth + tiny nose
-                for (const x of [-0.36, 0.36]) { const bl = new THREE.Mesh(new THREE.CircleGeometry(0.1, 16), new THREE.MeshBasicMaterial({ color: BLUSH, transparent: true, opacity: 0.5 })); bl.position.set(x, 0.8, 0.52); putB(bl, 'head'); }
-                const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.012, 8, 16, Math.PI), basic(MOUTH)); mouth.rotation.z = Math.PI; mouth.position.set(0, 0.72, 0.6); putB(mouth, 'head');
-                const nose = mk(new THREE.SphereGeometry(0.02, 8, 6), 0xe8b09c); nose.scale.set(1, 0.7, 0.6); nose.position.set(0, 0.79, 0.63); put(g, nose, 'skin', 'head');
-                // HAIR (lilac, layered): crown shell + tufts + center-parted fringe (tips above eyes) + side locks + back flaps + ahoge + shine
-                const crown = mk(new THREE.SphereGeometry(0.72, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.6), HAIR); crown.scale.set(1.03, 1.06, 1.08); crown.position.set(0, 1.02, -0.05); crown.rotation.x = -0.1; skin(g, crown, 'head', { s: 1.04 });
-                [[0, 1.5, -0.42, -0.9, 0], [-0.34, 1.44, -0.36, -0.8, 0.3], [0.34, 1.44, -0.36, -0.8, -0.3], [-0.42, 1.4, -0.02, -0.3, 0.7], [0.42, 1.4, -0.02, -0.3, -0.7]].forEach((t, i) => { const c = mk(new THREE.ConeGeometry(0.15, 0.55, 6), i % 2 ? HAIRSH : HAIR); c.scale.set(1, 1, 0.6); c.position.set(t[0], t[1], t[2]); c.rotation.x = t[3]; c.rotation.z = t[4]; skin(g, c, 'head', { s: 1.05 }); });
-                [[-0.1, 1.38, 0.55, 2.9, 0.15], [0.1, 1.38, 0.55, 2.9, -0.15], [-0.28, 1.35, 0.48, 2.85, 0.28], [0.28, 1.35, 0.48, 2.85, -0.28], [-0.44, 1.3, 0.32, 2.8, 0.42], [0.44, 1.3, 0.32, 2.8, -0.42]].forEach((b, i) => { const c = mk(new THREE.ConeGeometry(0.15, 0.52, 5), i < 2 ? HAIRHI : HAIR); c.scale.set(1.1, 1, 0.45); c.position.set(b[0], b[1], b[2]); c.rotation.x = b[3]; c.rotation.z = b[4]; skin(g, c, 'head', { s: 1.05 }); });
-                for (const x of [-0.5, 0.5]) { const lock = mk(new THREE.ConeGeometry(0.16, 0.95, 5), HAIR); lock.scale.set(0.8, 1, 0.5); lock.position.set(x, 1.05, 0.34); lock.rotation.x = 3.0; lock.rotation.z = x < 0 ? -0.1 : 0.1; skin(g, lock, 'head', { s: 1.04 }); }
-                for (const x of [-0.32, 0.32]) { const flap = mk(new THREE.ConeGeometry(0.34, 0.78, 5), HAIR); flap.scale.set(1.2, 1, 0.5); flap.position.set(x, 1.0, -0.46); flap.rotation.x = 3.0; flap.rotation.z = x < 0 ? 0.15 : -0.15; skin(g, flap, 'head', { s: 1.04 }); }
-                const ahoge = mk(new THREE.ConeGeometry(0.035, 0.42, 4), HAIRHI); ahoge.position.set(0, 1.6, -0.05); ahoge.rotation.x = 0.4; skin(g, ahoge, 'head');
-                for (const x of [-0.24, 0.02, 0.26]) { const sh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 0.02), basic(HAIRHI)); sh.position.set(x, 1.36, 0.4); sh.rotation.z = -x * 0.5; putB(sh, 'head'); }
+                // straight determined mouth + nose
+                const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.03, 0.04), basic(MOUTH)); mouth.position.set(0, 0.74, 0.6); putB(mouth, 'head');
+                const nose = mk(new THREE.SphereGeometry(0.045, 8, 6), SKIN); nose.scale.set(1, 0.8, 1.2); nose.position.set(0, 0.84, 0.63); put(g, nose, 'skin', 'head');
+                // BLACK spiky Goku hair — a big starburst of cones (up/out/back) + short forehead bangs
+                const cap = mk(new THREE.SphereGeometry(0.7, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.64), HAIR); cap.scale.set(1.05, 1.0, 1.07); cap.position.set(0, 1.0, -0.02); cap.rotation.x = -0.08; skin(g, cap, 'head', { s: 1.03 });
+                // [x, y, z, rotX, rotZ, height]
+                [[0, 1.66, -0.05, 0, 0, 0.85], [-0.2, 1.62, -0.02, 0, 0.22, 0.8], [0.2, 1.62, -0.02, 0, -0.22, 0.8],
+                [-0.42, 1.5, -0.05, 0, 0.5, 0.72], [0.42, 1.5, -0.05, 0, -0.5, 0.72],
+                [-0.52, 1.32, -0.1, -0.2, 0.85, 0.66], [0.52, 1.32, -0.1, -0.2, -0.85, 0.66],
+                [-0.3, 1.52, -0.36, -0.5, 0.3, 0.7], [0.3, 1.52, -0.36, -0.5, -0.3, 0.7], [0, 1.56, -0.42, -0.6, 0, 0.72],
+                [-0.16, 1.36, 0.44, 2.7, 0.15, 0.5], [0.16, 1.36, 0.44, 2.7, -0.15, 0.5], [0, 1.42, 0.5, 2.85, 0, 0.46]].forEach((s, i) => {
+                    const c = mk(new THREE.ConeGeometry(0.17, s[5], 6), i % 4 === 0 ? HAIRHI : HAIR); c.position.set(s[0], s[1], s[2]); c.rotation.x = s[3]; c.rotation.z = s[4]; skin(g, c, 'head', { s: 1.04 });
+                });
                 // muscle head + neck
                 const mneck = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.32, 10), mat(0xd14848, { emissive: 0x330a08 })); mneck.position.y = 0.16; put(g, mneck, 'muscle', 'head', 0x330a08, 0.22);
                 const mface = new THREE.Mesh(new THREE.SphereGeometry(0.62, 18, 14), mat(0xc94a4a, { emissive: 0x330a08 })); mface.scale.set(0.92, 1.05, 0.94); mface.position.y = 1.0; put(g, mface, 'muscle', 'head', 0x330a08, 0.22);
@@ -10589,32 +10588,35 @@ function drawCaesarCipher(ctx, c){
                 const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.2, 0.48), mat(0xe6dfca)); jaw.position.set(0, 0.72, 0.08); put(g, jaw, 'skeleton', 'head');
                 for (let i = 0; i < 3; i++) { const c = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), mat(0xeae3cf)); c.position.y = 0.1 + i * 0.14; put(g, c, 'skeleton', 'head'); }
             })();
-            // arms — slimmer for anime
+            // arms — bare, muscular (tan) with a blue wristband near each hand
             [['L', 1], ['R', -1]].forEach(([side, sx]) => {
                 const sh = joint(chest, 'shoulder' + side, sx * 0.62, 0.95, 0);
-                segment(sh, 'shoulder' + side, V(sx * 0.24, -0.95, 0), 0.18, SKIN, [[0.42, 0.22, 0.5]]);
+                segment(sh, 'shoulder' + side, V(sx * 0.24, -0.95, 0), 0.21, SKIN, [[0.42, 0.26, 0.5]]);
                 const el = joint(sh, 'elbow' + side, sx * 0.24, -0.95, 0);
-                segment(el, 'elbow' + side, V(sx * 0.1, -0.88, 0), 0.14, SKIN, [[0.4, 0.18, 0.5]]);
-                // hand — rounded for friendlier look
-                const hand = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), mat(SKIN)); hand.scale.set(0.8, 1.1, 0.7); hand.position.set(sx * 0.1, -0.88, 0); put(el, hand, 'skin', 'elbow' + side);
+                segment(el, 'elbow' + side, V(sx * 0.1, -0.88, 0), 0.17, SKIN, [[0.4, 0.22, 0.5]]);
+                // blue wristband (oriented along the forearm, near the wrist)
+                const fv = V(sx * 0.1, -0.88, 0); const fq = new THREE.Quaternion().setFromUnitVectors(V(0, 1, 0), fv.clone().normalize());
+                const band = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.26, 14), mat(BLUE)); band.quaternion.copy(fq); band.position.copy(fv.clone().multiplyScalar(0.8)); skin(el, band, 'elbow' + side);
+                // hand — fist
+                const hand = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), mat(SKIN)); hand.scale.set(0.85, 1.05, 0.8); hand.position.set(sx * 0.1, -0.9, 0); skin(el, hand, 'elbow' + side);
                 const mhand = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), mat(0xc94a4a, { emissive: 0x330a08 })); mhand.scale.set(0.7, 1.0, 0.6); mhand.position.copy(hand.position); put(el, mhand, 'muscle', 'elbow' + side, 0x330a08, 0.2);
                 const bhand = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), mat(0xeae3cf)); bhand.scale.set(0.65, 0.95, 0.55); bhand.position.copy(hand.position); put(el, bhand, 'skeleton', 'elbow' + side);
             });
-            // legs — LONGER for anime style (more leg-to-body ratio)
+            // legs — baggy orange gi trousers tucked into blue boots (red toe caps + laces)
             [['L', 1], ['R', -1]].forEach(([side, sx]) => {
                 const hip = joint(pelvis, 'hip' + side, sx * 0.33, -0.45, 0);
-                segment(hip, 'hip' + side, V(sx * 0.04, -1.8, 0), 0.27, SKIN, [[0.38, 0.36, 0.54], [0.7, 0.27, 0.36]]);
+                segment(hip, 'hip' + side, V(sx * 0.04, -1.8, 0), 0.31, GI, [[0.38, 0.36, 0.54], [0.7, 0.27, 0.36]]);
                 const knee = joint(hip, 'knee' + side, sx * 0.04, -1.8, 0);
-                segment(knee, 'knee' + side, V(0, -1.62, 0), 0.21, SKIN, [[0.35, 0.3, 0.5]]);
-                // thigh-high sock (white shell with a navy top band, leaving a bare-thigh gap under the skirt)
-                const sock = new THREE.Mesh(new THREE.CylinderGeometry(0.215, 0.15, 1.0, 14, 1, true), mat(SOCK, { side: THREE.DoubleSide })); sock.position.set(0, -1.05, 0); skin(knee, sock, 'knee' + side, { s: 1.03 });
-                const sockBand = new THREE.Mesh(new THREE.TorusGeometry(0.21, 0.03, 6, 16), mat(NAVY)); sockBand.rotation.x = Math.PI / 2; sockBand.position.set(0, -0.56, 0); put(knee, sockBand, 'skin', 'knee' + side);
-                // brown loafer: body + rounded toe + heel + darker saddle strap
-                const shoe = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.16, 0.44), mat(SHOE)); shoe.position.set(0, -1.68, 0.12); skin(knee, shoe, 'knee' + side);
-                const toe = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 10), mat(SHOE)); toe.scale.set(0.9, 0.62, 1.0); toe.position.set(0, -1.68, 0.34); skin(knee, toe, 'knee' + side);
-                const saddle = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.05, 0.09), mat(0x3a2a22)); saddle.position.set(0, -1.6, 0.12); put(knee, saddle, 'skin', 'knee' + side);
-                const bfoot = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.13, 0.48), mat(0xeae3cf)); bfoot.position.set(0, -1.68, 0.15); put(knee, bfoot, 'skeleton', 'knee' + side);
-                const mfoot = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.15, 0.52), mat(0xc94a4a, { emissive: 0x330a08 })); mfoot.position.set(0, -1.68, 0.15); put(knee, mfoot, 'muscle', 'knee' + side, 0x330a08, 0.2);
+                segment(knee, 'knee' + side, V(0, -1.5, 0), 0.27, GI, [[0.35, 0.3, 0.5]]);
+                // blue boot: cuff + ankle + foot + red toe cap + pale sole + laces
+                const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.29, 0.16, 14), mat(BLUE)); cuff.position.set(0, -1.5, 0); skin(knee, cuff, 'knee' + side);
+                const ankle = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.27, 0.36, 14), mat(BOOT)); ankle.position.set(0, -1.64, 0); skin(knee, ankle, 'knee' + side);
+                const bootF = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.22, 0.5), mat(BOOT)); bootF.position.set(0, -1.78, 0.14); skin(knee, bootF, 'knee' + side);
+                const toe = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), mat(BOOTRED)); toe.scale.set(0.95, 0.72, 1.0); toe.position.set(0, -1.78, 0.36); skin(knee, toe, 'knee' + side);
+                const sole = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.07, 0.56), mat(0xe8dcc0)); sole.position.set(0, -1.88, 0.14); put(knee, sole, 'skin', 'knee' + side);
+                for (let i = 0; i < 3; i++) { const lace = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.03, 0.03), mat(LACE)); lace.position.set(0, -1.58 - i * 0.08, 0.18); lace.rotation.x = 0.2; put(knee, lace, 'skin', 'knee' + side); }
+                const bfoot = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.13, 0.48), mat(0xeae3cf)); bfoot.position.set(0, -1.78, 0.15); put(knee, bfoot, 'skeleton', 'knee' + side);
+                const mfoot = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.15, 0.52), mat(0xc94a4a, { emissive: 0x330a08 })); mfoot.position.set(0, -1.78, 0.15); put(knee, mfoot, 'muscle', 'knee' + side, 0x330a08, 0.2);
             });
         }
 
@@ -10643,8 +10645,8 @@ function drawCaesarCipher(ctx, c){
                     ANA.orb.theta -= dx * 0.008; ANA.orb.phi = Math.max(0.3, Math.min(1.7, ANA.orb.phi - dy * 0.006));
                 } else {
                     const jt = ANA.three.joints[ANA.sel]; if (jt) {
-                        jt.rotation.x = Math.max(-2.96, Math.min(2.96, jt.rotation.x + dy * 0.01));
-                        jt.rotation.y = Math.max(-2.96, Math.min(2.96, jt.rotation.y + dx * 0.01));
+                        jt.userData.tx = Math.max(-2.96, Math.min(2.96, jt.userData.tx + dy * 0.01));
+                        jt.userData.ty = Math.max(-2.96, Math.min(2.96, jt.userData.ty + dx * 0.01));
                         anaRenderSliders();
                     }
                 }
@@ -10665,6 +10667,14 @@ function drawCaesarCipher(ctx, c){
                 const dark = document.body.classList.contains('dark-theme');
                 (T.scene.background = T.scene.background || new THREE.Color()).set(dark ? 0x121a30 : 0xe6eeff);
                 if (ANA.anim) { ANA.animT += dt; anaWalk(ANA.animT); }
+                // ease every joint toward its target rotation — poses glide, the walk flows (smooth motion)
+                const k = 1 - Math.exp(-dt / 0.12);
+                for (const n in T.joints) {
+                    const j = T.joints[n], u = j.userData;
+                    j.rotation.x += (u.tx - j.rotation.x) * k;
+                    j.rotation.y += (u.ty - j.rotation.y) * k;
+                    j.rotation.z += (u.tz - j.rotation.z) * k;
+                }
                 const o = ANA.orb;
                 T.cam.position.set(o.r * Math.sin(o.phi) * Math.sin(o.theta), 0.4 + o.r * Math.cos(o.phi) * 0.6, o.r * Math.sin(o.phi) * Math.cos(o.theta));
                 T.cam.lookAt(0, 0.2, 0);
