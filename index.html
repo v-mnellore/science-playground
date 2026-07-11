@@ -10280,7 +10280,7 @@ function drawCaesarCipher(ctx, c){
         function renderAnatomy(container) {
             if (ANA && ANA.raf) cancelAnimationFrame(ANA.raf);
             anaDispose3D();
-            ANA = { sel: 'shoulderR', layer: 'skin', anim: false, animT: 0, last: 0, raf: 0, three: null, no3d: false, orb: { theta: 0.0, phi: 1.15, r: 11, drag: null } };
+            ANA = { sel: 'shoulderR', layer: 'skin', anim: null, animT: 0, idleT: 0, blinkT: 0, last: 0, raf: 0, three: null, no3d: false, orb: { theta: 0.0, phi: 1.15, r: 11, drag: null } };
             container.innerHTML =
                 '<div class="af-wrap">' +
                     '<div class="af-top">' +
@@ -10317,7 +10317,9 @@ function drawCaesarCipher(ctx, c){
             [['relax', '🧍 Relax'], ['fight', '🥋 Fight'], ['tpose', '✝ T-pose'], ['wave', '👋 Wave'], ['sit', '🪑 Sit'], ['run', '🏃 Run']].forEach(p => {
                 h += '<button class="an-chipbtn" data-pose="' + p[0] + '">' + p[1] + '</button>';
             });
-            h += '<button class="an-chipbtn" id="anaAnim" data-anim="1">▶ Animate walk</button></div>';
+            h += '</div><div class="an-side-h">Animate</div><div class="af-top" style="gap:6px;margin:0">';
+            h += '<button class="an-chipbtn" data-anim="walk">🚶 Walk</button>';
+            h += '<button class="an-chipbtn" data-anim="fight">🥊 Shadowbox</button></div>';
             h += '<div class="an-side-h">Joint</div>';
             ANA_POSABLE.forEach(j => {
                 h += '<button class="an-joint' + (ANA.sel === j[0] ? ' sel' : '') + '" data-j="' + j[0] + '">' + j[1] + '</button>';
@@ -10327,10 +10329,7 @@ function drawCaesarCipher(ctx, c){
             side.innerHTML = h;
             side.querySelectorAll('[data-pose]').forEach(b => b.onclick = () => anaApplyPose(b.getAttribute('data-pose')));
             side.querySelectorAll('[data-j]').forEach(b => b.onclick = () => anaSelect(b.getAttribute('data-j')));
-            const anim = document.getElementById('anaAnim');
-            anim.classList.toggle('on', ANA.anim);
-            anim.textContent = ANA.anim ? '⏸ Stop walk' : '▶ Animate walk';
-            anim.onclick = anaToggleAnim;
+            side.querySelectorAll('[data-anim]').forEach(b => { b.classList.toggle('on', ANA.anim === b.getAttribute('data-anim')); b.onclick = () => anaSetAnim(b.getAttribute('data-anim')); });
             anaRenderSliders();
         }
         function anaRenderSliders() {
@@ -10347,7 +10346,7 @@ function drawCaesarCipher(ctx, c){
                 const jt = ANA.three && ANA.three.joints[ANA.sel]; if (!jt) return;
                 jt.userData['t' + 'xyz'[ax]] = deg * AN_D2R;   // eases to target for smooth motion
                 document.getElementById('anaV' + ax).textContent = deg + '°';
-                if (ANA.anim) anaToggleAnim();   // manual edit cancels the walk
+                if (ANA.anim) anaSetAnim(ANA.anim);   // manual edit cancels the animation
             });
         }
         function anaSelect(name) {
@@ -10384,7 +10383,7 @@ function drawCaesarCipher(ctx, c){
             });
         }
         function anaApplyPose(name, keepAnim, instant) {
-            if (!keepAnim && ANA.anim) anaToggleAnim();
+            if (!keepAnim && ANA.anim) anaSetAnim(ANA.anim);
             const pose = ANA_POSES[name] || {};
             if (ANA.three) ANA_POSABLE.forEach(j => {
                 const jt = ANA.three.joints[j[0]]; if (!jt) return;
@@ -10395,21 +10394,35 @@ function drawCaesarCipher(ctx, c){
             anaRenderSliders();
             SFX.play('click');
         }
-        function anaToggleAnim() {
-            ANA.anim = !ANA.anim;
-            const b = document.getElementById('anaAnim');
-            if (b) { b.classList.toggle('on', ANA.anim); b.textContent = ANA.anim ? '⏸ Stop walk' : '▶ Animate walk'; }
+        function anaSetAnim(mode) {
+            ANA.anim = (ANA.anim === mode) ? null : mode;
+            if (ANA.anim) ANA.animT = 0;
+            else if (ANA.three) { ANA.three.root.position.y = 0; anaApplyPose('relax', true); }   // glide back to standing
+            document.querySelectorAll('#anaSide [data-anim]').forEach(b => b.classList.toggle('on', ANA.anim === b.getAttribute('data-anim')));
+            SFX.play('toggle');
         }
+        // set a joint's TARGET (eased) — used by the animations
+        function anaTgt(n, x, y, z) { const j = ANA.three && ANA.three.joints[n]; if (j) { j.userData.tx = (x || 0) * AN_D2R; j.userData.ty = (y || 0) * AN_D2R; j.userData.tz = (z || 0) * AN_D2R; } }
         function anaWalk(t) {
             if (!ANA.three) return;
-            const J = ANA.three.joints, s = Math.sin(t * 3.4), s2 = Math.sin(t * 3.4 + Math.PI);
-            const set = (n, x, y, z) => { const j = J[n]; if (j) { j.userData.tx = (x || 0) * AN_D2R; j.userData.ty = (y || 0) * AN_D2R; j.userData.tz = (z || 0) * AN_D2R; } };
-            set('hipL', 34 * s); set('hipR', 34 * s2);
-            set('kneeL', -(28 + 28 * Math.sin(t * 3.4 + 0.5)) - 6);
-            set('kneeR', -(28 + 28 * Math.sin(t * 3.4 + Math.PI + 0.5)) - 6);
-            set('shoulderL', 26 * s2, 0, 8); set('shoulderR', 26 * s, 0, -8);
-            set('elbowL', 0, 0, 42); set('elbowR', 0, 0, -42);
-            set('chest', 4, 5 * s, 0); set('head', 0, -4 * s, 0);
+            const s = Math.sin(t * 3.4), s2 = Math.sin(t * 3.4 + Math.PI);
+            anaTgt('hipL', 36 * s, 0, 3); anaTgt('hipR', 36 * s2, 0, -3);
+            anaTgt('kneeL', -(26 + 30 * Math.sin(t * 3.4 + 0.5)) - 6);
+            anaTgt('kneeR', -(26 + 30 * Math.sin(t * 3.4 + Math.PI + 0.5)) - 6);
+            anaTgt('shoulderL', 30 * s2, 0, 8); anaTgt('shoulderR', 30 * s, 0, -8);
+            anaTgt('elbowL', 0, 0, 30 + 18 * Math.max(0, s)); anaTgt('elbowR', 0, 0, -30 - 18 * Math.max(0, s2));
+            anaTgt('chest', 5, 6 * s, 0); anaTgt('head', 0, -5 * s, 0);
+        }
+        // Shadow-boxing: alternating straight punches from a bobbing guard, torso twisting into each punch.
+        function anaFight(t) {
+            if (!ANA.three) return;
+            const beat = t * 3.0;
+            const r = Math.max(0, Math.sin(beat)), l = Math.max(0, Math.sin(beat + Math.PI));
+            anaTgt('shoulderR', -68 - r * 18, r * 10, -14 - r * 2); anaTgt('elbowR', 0, 0, -100 + r * 96);
+            anaTgt('shoulderL', -68 - l * 18, -l * 10, 14 + l * 2); anaTgt('elbowL', 0, 0, 100 - l * 96);
+            anaTgt('chest', 8, (l - r) * 15, 0); anaTgt('head', -4, (l - r) * 7, 0);
+            anaTgt('hipR', 12, -14, -12); anaTgt('kneeR', -34, 0, 0);
+            anaTgt('hipL', -22, 14, 12); anaTgt('kneeL', -50, 0, 0);
         }
 
         // ---- 3D scene + figure ----
@@ -10459,8 +10472,11 @@ function drawCaesarCipher(ctx, c){
             // material factory that also records the mesh into a layer + tags it for highlight/pick
             const put = (group, mesh, layer, jointName, emis, emisInt) => {
                 mesh.userData = { joint: jointName, layer, baseEmis: emis || 0, baseInt: emisInt || 0 };
-                mesh.material.emissive = new THREE.Color(emis || 0);
-                mesh.material.emissiveIntensity = emisInt || 0;
+                // Only MeshStandardMaterial has emissive — forcing it onto MeshBasicMaterial crashes Three's uniform refresh.
+                if (mesh.material && mesh.material.isMeshStandardMaterial) {
+                    mesh.material.emissive = new THREE.Color(emis || 0);
+                    mesh.material.emissiveIntensity = emisInt || 0;
+                }
                 group.add(mesh); T.layers[layer].push(mesh); T.meshes.push(mesh);
             };
             const mat = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.62, metalness: 0.04 }, o || {}));
@@ -10559,19 +10575,28 @@ function drawCaesarCipher(ctx, c){
                     const ear = mk(new THREE.SphereGeometry(0.1, 10, 8), SKIN); ear.scale.set(0.5, 1.0, 0.7); ear.position.set(x, 0.92, 0.02); skin(g, ear, 'head', { s: 1.08 });
                     const inner = mk(new THREE.SphereGeometry(0.055, 8, 6), 0xd89a78); inner.scale.set(0.5, 1, 0.6); inner.position.set(x * 0.96, 0.92, 0.05); put(g, inner, 'skin', 'head');
                 }
-                // stern male eyes: narrow, dark, sharp upper lid + thick angled brow (no outlines)
-                for (const x of [-0.24, 0.24]) {
-                    const sc = mk(new THREE.SphereGeometry(1, 18, 14), SCLERA); sc.scale.set(0.15, 0.1, 0.05); sc.position.set(x, 0.95, 0.56); put(g, sc, 'skin', 'head');
-                    const iris = mk(new THREE.SphereGeometry(1, 14, 12), EYE); iris.scale.set(0.075, 0.1, 0.05); iris.position.set(x, 0.945, 0.585); put(g, iris, 'skin', 'head');
-                    const cl = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), basic(0xffffff)); cl.position.set(x + 0.03, 0.985, 0.6); putB(cl, 'head');
-                    const lid = mk(new THREE.BoxGeometry(0.21, 0.055, 0.06), 0x2a2018); lid.position.set(x, 1.005, 0.55); lid.rotation.z = x < 0 ? -0.14 : 0.14; put(g, lid, 'skin', 'head');
-                    const brow = mk(new THREE.BoxGeometry(0.24, 0.055, 0.055), BROW); brow.position.set(x, 1.08, 0.53); brow.rotation.z = x < 0 ? -0.2 : 0.2; put(g, brow, 'skin', 'head');
+                // BIG readable determined eyes — each in a Group so it can blink (squash). Registered in the skin layer.
+                T.eyes = T.eyes || [];
+                for (const x of [-0.23, 0.23]) {
+                    const eye = new THREE.Group(); eye.position.set(x, 0.95, 0); g.add(eye); T.eyes.push(eye);
+                    const reg = mesh => { mesh.userData = { joint: 'head', layer: 'skin', baseEmis: 0, baseInt: 0 }; T.layers.skin.push(mesh); T.meshes.push(mesh); eye.add(mesh); };
+                    const sc = new THREE.Mesh(new THREE.SphereGeometry(1, 18, 14), mat(SCLERA)); sc.scale.set(0.145, 0.17, 0.07); sc.position.set(0, 0, 0.55); reg(sc);
+                    const iris = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), mat(EYE)); iris.scale.set(0.1, 0.135, 0.07); iris.position.set(0, -0.005, 0.585); reg(iris);
+                    const pup = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), basic(0x08080e)); pup.scale.set(0.05, 0.085, 0.06); pup.position.set(0, -0.005, 0.61); reg(pup);
+                    const hi = new THREE.Mesh(new THREE.SphereGeometry(0.036, 8, 6), basic(0xffffff)); hi.position.set(0.045, 0.055, 0.63); reg(hi);
+                    // dark upper lash line framing the eye (stern look) — basic material, so use putB (never put)
+                    const lash = new THREE.Mesh(new THREE.TorusGeometry(0.135, 0.026, 6, 16, Math.PI), basic(0x140f16)); lash.position.set(x, 0.98, 0.58); putB(lash, 'head');
+                    // thick black brow, angled inward
+                    const brow = mk(new THREE.BoxGeometry(0.26, 0.06, 0.06), BROW); brow.position.set(x, 1.09, 0.55); brow.rotation.z = x < 0 ? -0.22 : 0.22; put(g, brow, 'skin', 'head');
                 }
-                // straight determined mouth + nose
-                const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.03, 0.04), basic(MOUTH)); mouth.position.set(0, 0.74, 0.6); putB(mouth, 'head');
-                const nose = mk(new THREE.SphereGeometry(0.045, 8, 6), SKIN); nose.scale.set(1, 0.8, 1.2); nose.position.set(0, 0.84, 0.63); put(g, nose, 'skin', 'head');
+                // defined nose + straight determined mouth
+                const nose = mk(new THREE.ConeGeometry(0.06, 0.14, 6), SKIN); nose.rotation.x = Math.PI * 0.5; nose.position.set(0, 0.85, 0.66); put(g, nose, 'skin', 'head');
+                const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.035, 0.05), basic(MOUTH)); mouth.position.set(0, 0.74, 0.62); putB(mouth, 'head');
                 // BLACK spiky Goku hair — a big starburst of cones (up/out/back) + short forehead bangs
-                const cap = mk(new THREE.SphereGeometry(0.7, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.64), HAIR); cap.scale.set(1.05, 1.0, 1.07); cap.position.set(0, 1.0, -0.02); cap.rotation.x = -0.08; skin(g, cap, 'head', { s: 1.03 });
+                // skull-cap of hair that sits high and back, leaving the whole face (forehead + eyes) exposed
+                const cap = mk(new THREE.SphereGeometry(0.7, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.5), HAIR); cap.scale.set(1.06, 0.9, 1.05); cap.position.set(0, 1.12, -0.12); cap.rotation.x = -0.16; skin(g, cap, 'head', { s: 1.03 });
+                // hair wraps ONLY the back hemisphere (phi π..2π) so the nape isn't bald and the face stays clear
+                const backHair = mk(new THREE.SphereGeometry(0.62, 16, 12, Math.PI, Math.PI, Math.PI * 0.28, Math.PI * 0.6), HAIR); backHair.scale.set(1.06, 1.0, 1.04); backHair.position.set(0, 1.04, -0.06); skin(g, backHair, 'head', { s: 1.03 });
                 // [x, y, z, rotX, rotZ, height]
                 [[0, 1.66, -0.05, 0, 0, 0.85], [-0.2, 1.62, -0.02, 0, 0.22, 0.8], [0.2, 1.62, -0.02, 0, -0.22, 0.8],
                 [-0.42, 1.5, -0.05, 0, 0.5, 0.72], [0.42, 1.5, -0.05, 0, -0.5, 0.72],
@@ -10634,7 +10659,7 @@ function drawCaesarCipher(ctx, c){
                 if (!ANA.three) return;
                 cv.setPointerCapture && cv.setPointerCapture(e.pointerId);
                 const j = pick(e);
-                if (j) { anaSelect(j); ANA.drag = { mode: 'bend', x: e.clientX, y: e.clientY }; cv.classList.add('bending'); if (ANA.anim) anaToggleAnim(); }
+                if (j) { anaSelect(j); ANA.drag = { mode: 'bend', x: e.clientX, y: e.clientY }; cv.classList.add('bending'); if (ANA.anim) anaSetAnim(ANA.anim); }
                 else { ANA.drag = { mode: 'orbit', x: e.clientX, y: e.clientY }; }
             });
             cv.addEventListener('pointermove', e => {
@@ -10666,8 +10691,9 @@ function drawCaesarCipher(ctx, c){
                 if (T._w !== W) { T._w = W; T.renderer.setSize(W, 500, false); T.cam.aspect = W / 500; T.cam.updateProjectionMatrix(); }
                 const dark = document.body.classList.contains('dark-theme');
                 (T.scene.background = T.scene.background || new THREE.Color()).set(dark ? 0x121a30 : 0xe6eeff);
-                if (ANA.anim) { ANA.animT += dt; anaWalk(ANA.animT); }
-                // ease every joint toward its target rotation — poses glide, the walk flows (smooth motion)
+                if (ANA.anim === 'walk') { ANA.animT += dt; anaWalk(ANA.animT); }
+                else if (ANA.anim === 'fight') { ANA.animT += dt; anaFight(ANA.animT); }
+                // ease every joint toward its target rotation — poses glide, animations flow (smooth motion)
                 const k = 1 - Math.exp(-dt / 0.12);
                 for (const n in T.joints) {
                     const j = T.joints[n], u = j.userData;
@@ -10675,6 +10701,22 @@ function drawCaesarCipher(ctx, c){
                     j.rotation.y += (u.ty - j.rotation.y) * k;
                     j.rotation.z += (u.tz - j.rotation.z) * k;
                 }
+                // gentle idle breathing when standing still (adds life without fighting the pose)
+                if (!ANA.anim && !ANA.drag) {
+                    ANA.idleT += dt;
+                    const br = Math.sin(ANA.idleT * 1.5) * 0.02;
+                    if (T.joints.chest) T.joints.chest.rotation.x += br;
+                    if (T.joints.head) T.joints.head.rotation.x -= br * 0.5;
+                }
+                // blinking eyes (always alive) — quick squash every ~3.4s
+                if (T.eyes) {
+                    ANA.blinkT += dt;
+                    const cyc = ANA.blinkT % 3.4;
+                    const bs = cyc < 0.14 ? 1 - Math.sin((cyc / 0.14) * Math.PI) * 0.9 : 1;
+                    T.eyes.forEach(e => e.scale.y = bs);
+                }
+                // vertical bob during locomotion
+                T.root.position.y = ANA.anim ? Math.abs(Math.sin(ANA.animT * 3.4)) * 0.05 : 0;
                 const o = ANA.orb;
                 T.cam.position.set(o.r * Math.sin(o.phi) * Math.sin(o.theta), 0.4 + o.r * Math.cos(o.phi) * 0.6, o.r * Math.sin(o.phi) * Math.cos(o.theta));
                 T.cam.lookAt(0, 0.2, 0);
