@@ -1190,6 +1190,30 @@
             .af-main { flex-direction: column; }
             .af-side { width: 100%; max-height: 180px; }
         }
+
+        /* ===== ANATOMY POSER (Lobby) ===== */
+        #anaCanvas { display: block; width: 100%; height: 500px; border-radius: 14px; border: 2px solid var(--border-light); background: linear-gradient(180deg, #dfeaff, #eef4ff); touch-action: none; cursor: grab; }
+        body.dark-theme #anaCanvas { background: linear-gradient(180deg, #10182e, #182142); border-color: #3a4163; }
+        #anaCanvas.bending { cursor: ns-resize; }
+        .an-seg { display: flex; gap: 0; border: 2px solid var(--border-light); border-radius: 10px; overflow: hidden; }
+        .an-seg button { flex: 1; border: none; background: var(--bg-white); color: var(--text-dark); font-weight: 800; font-size: 0.8em; padding: 7px 10px; cursor: pointer; white-space: nowrap; }
+        .an-seg button + button { border-left: 1px solid var(--border-light); }
+        .an-seg button.on { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; }
+        .an-side-h { font-size: 0.68em; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-light); margin: 8px 2px 3px; }
+        .an-joint { text-align: left; border: 2px solid var(--border-light); background: var(--bg-white); border-radius: 9px; padding: 6px 9px; cursor: pointer; font-family: inherit; font-weight: 700; font-size: 0.78em; color: var(--text-dark); }
+        .an-joint:hover { border-color: var(--primary); }
+        .an-joint.sel { border-color: var(--primary); background: rgba(102,126,234,0.12); }
+        .an-chipbtn { border: 2px solid var(--border-light); background: var(--bg-white); color: var(--text-dark); border-radius: 999px; padding: 5px 11px; font-weight: 700; font-size: 0.78em; cursor: pointer; }
+        .an-chipbtn:hover { border-color: var(--primary); }
+        .an-chipbtn.on { background: linear-gradient(135deg, #22c55e, #16a34a); color: #fff; border-color: transparent; }
+        .an-sliders { background: var(--bg-light); border-radius: 10px; padding: 9px 11px; margin-top: 4px; }
+        .an-srow { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 0.78em; font-weight: 700; color: var(--text-dark); }
+        .an-srow label { width: 62px; }
+        .an-srow input[type=range] { flex: 1; min-width: 0; accent-color: var(--primary); }
+        .an-srow .v { width: 42px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text-light); }
+        .an-tag { position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; pointer-events: none; }
+        .an-hint { position: absolute; bottom: 12px; left: 12px; right: 12px; text-align: center; font-size: 0.82em; color: var(--text-dark); background: rgba(255,255,255,0.82); border-radius: 10px; padding: 5px 10px; pointer-events: none; }
+        body.dark-theme .an-hint { background: rgba(20,24,40,0.82); color: #dfe5ff; }
         .af-tpl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         .af-tpl { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border: 2px solid var(--border-light); background: var(--bg-white); border-radius: 12px; padding: 11px 13px; cursor: pointer; text-align: left; font-family: inherit; }
         .af-tpl:hover { border-color: var(--primary); background: rgba(102,126,234,0.08); }
@@ -8942,7 +8966,9 @@ function drawCaesarCipher(ctx, c){
             { id: 'ships', icon: '🚢', title: 'Battleship', desc: '10×10 naval strategy — sink the enemy fleet before they sink yours.',
               stat: () => { const s = shipsStats(); return (s.wins || s.losses) ? ('🏆 ' + (s.wins || 0) + ' win' + ((s.wins || 0) === 1 ? '' : 's') + ' · ' + (s.losses || 0) + ' loss' + ((s.losses || 0) === 1 ? '' : 'es')) : 'Not played yet'; } },
             { id: 'aeroforge', icon: '✈️', title: 'Build-a-Plane 3D', desc: 'Design a plane from 3D parts on an orbitable workspace, balance the wings, then test-fly it through a 3D sky — earn coins, unlock jets, pop balloons with turrets.',
-              stat: () => { const s = afStore(); return (s.best || s.coins) ? ('🪙 ' + (s.coins || 0) + ' coins · 📏 best ' + (s.best || 0) + ' m') : 'Not flown yet'; } }
+              stat: () => { const s = afStore(); return (s.best || s.coins) ? ('🪙 ' + (s.coins || 0) + ' coins · 📏 best ' + (s.best || 0) + ' m') : 'Not flown yet'; } },
+            { id: 'anatomy', icon: '🦴', title: 'Anatomy Poser', desc: 'Pose a 3D anime figure — bend its limbs, then peel back the layers from skin to muscles to skeleton to see exactly how each movement is made.',
+              stat: () => 'Pose · Muscles · Skeleton' }
         ];
         function selectLobby() {
             SFX.play('click');
@@ -8996,6 +9022,7 @@ function drawCaesarCipher(ctx, c){
             game.innerHTML = '';
             if (id === 'ships') renderShips(game);
             else if (id === 'aeroforge') renderAeroforge(game);
+            else if (id === 'anatomy') renderAnatomy(game);
         }
         function lobbyShowHub() {
             SFX.play('click');
@@ -10224,6 +10251,359 @@ function drawCaesarCipher(ctx, c){
                 '</div>';
             SENSOR.t0 = 0;
             if (!SENSOR.raf) SENSOR.raf = requestAnimationFrame(sensorLoop);
+        }
+
+        // ===== ANATOMY POSER — Lobby: pose a 3D anime figure across skin / muscle / skeleton layers =====
+        // A single articulated humanoid built from Three.js primitives. Every joint carries THREE layer
+        // meshes (skin, muscle, bone) parented to the same group, so bending a joint moves all three —
+        // switch layers to see exactly how a movement is driven by muscles and bones.
+        let ANA = null;
+        const ANA_POSABLE = [
+            ['pelvis', '🧍 Hips'], ['chest', '🫁 Torso'], ['head', '🙂 Head'],
+            ['shoulderL', '💪 L Shoulder'], ['elbowL', '🦾 L Elbow'],
+            ['shoulderR', '💪 R Shoulder'], ['elbowR', '🦾 R Elbow'],
+            ['hipL', '🦵 L Hip'], ['kneeL', '🦿 L Knee'],
+            ['hipR', '🦵 R Hip'], ['kneeR', '🦿 R Knee']
+        ];
+        // Poses as {joint:[xDeg,yDeg,zDeg]} — omitted joints reset to 0.
+        const ANA_POSES = {
+            relax: { elbowL: [0, 0, 6], elbowR: [0, 0, -6] },
+            tpose: { shoulderL: [0, 0, 78], shoulderR: [0, 0, -78] },
+            wave: { shoulderR: [0, 0, -150], elbowR: [0, 20, -55], shoulderL: [0, 0, 12], head: [0, -14, 0] },
+            sit: { hipL: [-92, 0, 4], hipR: [-92, 0, -4], kneeL: [96, 0, 0], kneeR: [96, 0, 0], chest: [8, 0, 0], shoulderL: [-14, 0, 10], shoulderR: [-14, 0, -10] },
+            run: { hipL: [42, 0, 0], kneeL: [-52, 0, 0], hipR: [-34, 0, 0], kneeR: [-84, 0, 0], shoulderL: [-38, 0, 10], elbowL: [0, 0, 74], shoulderR: [40, 0, -10], elbowR: [0, 0, -74], chest: [12, 6, 0], head: [-6, 0, 0] }
+        };
+        const AN_D2R = Math.PI / 180;
+
+        function renderAnatomy(container) {
+            if (ANA && ANA.raf) cancelAnimationFrame(ANA.raf);
+            anaDispose3D();
+            ANA = { sel: 'shoulderR', layer: 'skin', anim: false, animT: 0, last: 0, raf: 0, three: null, no3d: false, orb: { theta: 0.0, phi: 1.15, r: 11, drag: null } };
+            container.innerHTML =
+                '<div class="af-wrap">' +
+                    '<div class="af-top">' +
+                        '<span class="af-mode">🦴 Anatomy Poser</span>' +
+                        '<span class="an-seg" id="anaLayers">' +
+                            '<button data-l="skin" class="on">🧑 Skin</button>' +
+                            '<button data-l="muscle">💪 Muscles</button>' +
+                            '<button data-l="skeleton">🦴 Skeleton</button>' +
+                        '</span>' +
+                        '<span class="af-spacer"></span>' +
+                        '<button class="ships-btn ghost" id="anaReset">↺ Reset pose</button>' +
+                    '</div>' +
+                    '<div class="af-main">' +
+                        '<div class="af-side" id="anaSide"></div>' +
+                        '<div class="af-stage">' +
+                            '<canvas id="anaCanvas"></canvas>' +
+                            '<div class="an-tag"><span class="af-chip" id="anaSelChip">Selected: —</span><span class="af-chip" id="anaLayerChip">Skin</span></div>' +
+                            '<div class="an-hint">🖱️ Drag a limb to bend it · drag the background to orbit · scroll to zoom</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="af-note" id="anaNote"></div>' +
+                '</div>';
+            const cv = document.getElementById('anaCanvas');
+            document.getElementById('anaLayers').querySelectorAll('button').forEach(b => b.onclick = () => anaSetLayer(b.getAttribute('data-l')));
+            document.getElementById('anaReset').onclick = () => anaApplyPose('relax');
+            anaRenderSide();
+            anaBindPointer(cv);
+            ANA.raf = requestAnimationFrame(anaLoop);
+        }
+
+        function anaRenderSide() {
+            const side = document.getElementById('anaSide'); if (!side) return;
+            let h = '<div class="an-side-h">Poses</div><div class="af-top" style="gap:6px;margin:0">';
+            [['relax', '🧍 Relax'], ['tpose', '✝ T-pose'], ['wave', '👋 Wave'], ['sit', '🪑 Sit'], ['run', '🏃 Run']].forEach(p => {
+                h += '<button class="an-chipbtn" data-pose="' + p[0] + '">' + p[1] + '</button>';
+            });
+            h += '<button class="an-chipbtn" id="anaAnim" data-anim="1">▶ Animate walk</button></div>';
+            h += '<div class="an-side-h">Joint</div>';
+            ANA_POSABLE.forEach(j => {
+                h += '<button class="an-joint' + (ANA.sel === j[0] ? ' sel' : '') + '" data-j="' + j[0] + '">' + j[1] + '</button>';
+            });
+            h += '<div class="an-side-h">Bend selected</div>';
+            h += '<div class="an-sliders" id="anaSliders"></div>';
+            side.innerHTML = h;
+            side.querySelectorAll('[data-pose]').forEach(b => b.onclick = () => anaApplyPose(b.getAttribute('data-pose')));
+            side.querySelectorAll('[data-j]').forEach(b => b.onclick = () => anaSelect(b.getAttribute('data-j')));
+            const anim = document.getElementById('anaAnim');
+            anim.classList.toggle('on', ANA.anim);
+            anim.textContent = ANA.anim ? '⏸ Stop walk' : '▶ Animate walk';
+            anim.onclick = anaToggleAnim;
+            anaRenderSliders();
+        }
+        function anaRenderSliders() {
+            const box = document.getElementById('anaSliders'); if (!box) return;
+            const j = ANA.three && ANA.three.joints[ANA.sel];
+            const rot = j ? [j.rotation.x, j.rotation.y, j.rotation.z].map(v => Math.round(v / AN_D2R)) : [0, 0, 0];
+            const lbl = ['Bend', 'Twist', 'Splay'];
+            box.innerHTML = ['x', 'y', 'z'].map((ax, i) =>
+                '<div class="an-srow"><label>' + lbl[i] + '</label>' +
+                '<input type="range" min="-170" max="170" value="' + rot[i] + '" data-ax="' + i + '">' +
+                '<span class="v" id="anaV' + i + '">' + rot[i] + '°</span></div>').join('');
+            box.querySelectorAll('input').forEach(inp => inp.oninput = () => {
+                const ax = +inp.getAttribute('data-ax'), deg = +inp.value;
+                const jt = ANA.three && ANA.three.joints[ANA.sel]; if (!jt) return;
+                jt.rotation['xyz'[ax]] = deg * AN_D2R;
+                document.getElementById('anaV' + ax).textContent = deg + '°';
+                if (ANA.anim) anaToggleAnim();   // manual edit cancels the walk
+            });
+        }
+        function anaSelect(name) {
+            ANA.sel = name;
+            document.querySelectorAll('#anaSide .an-joint').forEach(b => b.classList.toggle('sel', b.getAttribute('data-j') === name));
+            const chip = document.getElementById('anaSelChip');
+            if (chip) chip.textContent = 'Selected: ' + ((ANA_POSABLE.find(j => j[0] === name) || [, name])[1] || name).replace(/^[^ ]+ /, '');
+            anaHighlight();
+            anaRenderSliders();
+            SFX.play('click');
+        }
+        function anaSetLayer(layer) {
+            ANA.layer = layer;
+            document.querySelectorAll('#anaLayers button').forEach(b => b.classList.toggle('on', b.getAttribute('data-l') === layer));
+            const chip = document.getElementById('anaLayerChip');
+            if (chip) chip.textContent = { skin: 'Skin', muscle: 'Muscles', skeleton: 'Skeleton' }[layer];
+            const note = document.getElementById('anaNote');
+            if (note) note.innerHTML = { skin: '🧑 <b>Skin</b> — the outer anime figure. Bend a joint, then switch layers to reveal what drives it.',
+                muscle: '💪 <b>Muscles</b> — red muscle bellies span each joint. As a limb bends, watch which muscles bunch up to pull the bone.',
+                skeleton: '🦴 <b>Skeleton</b> — the bones and joints. This is the rigid frame every movement actually rotates around.' }[layer];
+            if (ANA.three) {
+                ['skin', 'muscle', 'skeleton'].forEach(L => ANA.three.layers[L].forEach(m => m.visible = (L === layer)));
+                anaHighlight();
+            }
+            SFX.play('toggle');
+        }
+        function anaHighlight() {
+            if (!ANA.three) return;
+            ANA.three.meshes.forEach(m => {
+                const on = m.userData.joint === ANA.sel && m.visible;
+                m.material.emissive.setHex(on ? 0x2b6cff : m.userData.baseEmis);
+                m.material.emissiveIntensity = on ? 0.55 : (m.userData.baseInt || 0);
+            });
+        }
+        function anaApplyPose(name, keepAnim) {
+            if (!keepAnim && ANA.anim) anaToggleAnim();
+            const pose = ANA_POSES[name] || {};
+            if (ANA.three) ANA_POSABLE.forEach(j => {
+                const jt = ANA.three.joints[j[0]]; if (!jt) return;
+                const r = pose[j[0]] || [0, 0, 0];
+                jt.rotation.set(r[0] * AN_D2R, r[1] * AN_D2R, r[2] * AN_D2R);
+            });
+            anaRenderSliders();
+            SFX.play('click');
+        }
+        function anaToggleAnim() {
+            ANA.anim = !ANA.anim;
+            const b = document.getElementById('anaAnim');
+            if (b) { b.classList.toggle('on', ANA.anim); b.textContent = ANA.anim ? '⏸ Stop walk' : '▶ Animate walk'; }
+        }
+        function anaWalk(t) {
+            if (!ANA.three) return;
+            const J = ANA.three.joints, s = Math.sin(t * 3.4), s2 = Math.sin(t * 3.4 + Math.PI);
+            const set = (n, x, y, z) => { const j = J[n]; if (j) j.rotation.set((x || 0) * AN_D2R, (y || 0) * AN_D2R, (z || 0) * AN_D2R); };
+            set('hipL', 34 * s); set('hipR', 34 * s2);
+            set('kneeL', -(28 + 28 * Math.sin(t * 3.4 + 0.5)) - 6);
+            set('kneeR', -(28 + 28 * Math.sin(t * 3.4 + Math.PI + 0.5)) - 6);
+            set('shoulderL', 26 * s2, 0, 8); set('shoulderR', 26 * s, 0, -8);
+            set('elbowL', 0, 0, 42); set('elbowR', 0, 0, -42);
+            set('chest', 4, 5 * s, 0); set('head', 0, -4 * s, 0);
+        }
+
+        // ---- 3D scene + figure ----
+        function anaInit3D(cv) {
+            if (!window.THREE) { ANA.no3d = true; anaFallback(); return; }
+            let renderer;
+            try { renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true }); }
+            catch (e) { ANA.no3d = true; anaFallback(); return; }
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+            const scene = new THREE.Scene();
+            const cam = new THREE.PerspectiveCamera(45, cv.clientWidth / 500, 0.1, 200);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.72));
+            const key = new THREE.DirectionalLight(0xffffff, 0.85); key.position.set(5, 9, 7); scene.add(key);
+            const rim = new THREE.DirectionalLight(0x88aaff, 0.4); rim.position.set(-6, 4, -5); scene.add(rim);
+            const T = ANA.three = { renderer, scene, cam, root: new THREE.Group(), joints: {}, layers: { skin: [], muscle: [], skeleton: [] }, meshes: [], ray: new THREE.Raycaster() };
+            scene.add(T.root);
+            // subtle ground disc for grounding
+            const ground = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.4, 0.18, 40),
+                new THREE.MeshStandardMaterial({ color: 0xb9c6e6, roughness: 0.95 }));
+            ground.position.y = -3.55; T.root.add(ground);
+            anaBuildFigure(T);
+            anaSetLayer(ANA.layer);
+            anaApplyPose('relax', true);
+            anaHighlight();
+        }
+        function anaFallback() {
+            const cv = document.getElementById('anaCanvas'); if (!cv) return;
+            const ctx = cv.getContext && cv.getContext('2d');
+            if (ctx) { cv.width = cv.clientWidth; cv.height = 500; ctx.fillStyle = '#334'; ctx.font = '16px Segoe UI'; ctx.textAlign = 'center'; ctx.fillText('3D not available on this device.', cv.width / 2, 250); }
+        }
+        function anaDispose3D() {
+            if (!ANA || !ANA.three) return;
+            const T = ANA.three;
+            T.scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); });
+            T.renderer.dispose();
+            if (T.renderer.forceContextLoss) try { T.renderer.forceContextLoss(); } catch (e) { }
+            ANA.three = null;
+        }
+
+        // Build the articulated figure. Each joint is a Group at its pivot; bone meshes span to the child.
+        function anaBuildFigure(T) {
+            const V = (x, y, z) => new THREE.Vector3(x, y, z);
+            const joint = (parent, name, px, py, pz) => { const g = new THREE.Group(); g.position.set(px, py, pz); parent.add(g); T.joints[name] = g; return g; };
+            const stdEmis = 0x000000;
+            // material factory that also records the mesh into a layer + tags it for highlight/pick
+            const put = (group, mesh, layer, jointName, emis, emisInt) => {
+                mesh.userData = { joint: jointName, layer, baseEmis: emis || 0, baseInt: emisInt || 0 };
+                mesh.material.emissive = new THREE.Color(emis || 0);
+                mesh.material.emissiveIntensity = emisInt || 0;
+                group.add(mesh); T.layers[layer].push(mesh); T.meshes.push(mesh);
+            };
+            const mat = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.7, metalness: 0.05 }, o || {}));
+            // Add a limb segment: cylinder + rounded caps (skin), a muscle belly (muscle), a bone shaft (skeleton).
+            function segment(group, jointName, vec, r, colSkin, muscles) {
+                const len = vec.length(); if (len < 1e-4) return;
+                const dir = vec.clone().normalize();
+                const q = new THREE.Quaternion().setFromUnitVectors(V(0, 1, 0), dir);
+                const mid = dir.clone().multiplyScalar(len / 2);
+                // SKIN
+                const cyl = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.82, r, len, 16), mat(colSkin));
+                cyl.quaternion.copy(q); cyl.position.copy(mid); put(group, cyl, 'skin', jointName);
+                const capA = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 12), mat(colSkin)); put(group, capA, 'skin', jointName);
+                const capB = new THREE.Mesh(new THREE.SphereGeometry(r * 0.82, 14, 12), mat(colSkin)); capB.position.copy(vec); put(group, capB, 'skin', jointName);
+                // MUSCLE — one or two red bellies hugging the bone
+                (muscles || [[0.5, r * 1.02, 0.46]]).forEach(m => {
+                    const belly = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 12), mat(0xc0392b, { roughness: 0.55, emissive: 0x330a08 }));
+                    belly.scale.set(m[1], len * m[2], m[1]);
+                    belly.quaternion.copy(q); belly.position.copy(dir.clone().multiplyScalar(len * m[0]));
+                    put(group, belly, 'muscle', jointName, 0x330a08, 0.25);
+                });
+                // SKELETON — thin ivory shaft + joint knobs
+                const shaft = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.3, r * 0.3, len * 0.96, 10), mat(0xf3efe0, { roughness: 0.5 }));
+                shaft.quaternion.copy(q); shaft.position.copy(mid); put(group, shaft, 'skeleton', jointName);
+                const knobA = new THREE.Mesh(new THREE.SphereGeometry(r * 0.52, 12, 10), mat(0xeae3cf)); put(group, knobA, 'skeleton', jointName);
+                const knobB = new THREE.Mesh(new THREE.SphereGeometry(r * 0.46, 12, 10), mat(0xeae3cf)); knobB.position.copy(vec); put(group, knobB, 'skeleton', jointName);
+            }
+
+            const SKIN = 0xffc196, SHIRT = 0x5b7cf0, SHORTS = 0x33405c, HAIR = 0x2a2732;
+            // pelvis (root)
+            const pelvis = joint(T.root, 'pelvis', 0, 0, 0);
+            (function () {
+                const g = pelvis;
+                // skin/shorts hips
+                const hips = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.8, 0.85), mat(SHORTS)); hips.position.y = -0.15; put(g, hips, 'skin', 'pelvis');
+                // muscle glutes/abs
+                const glut = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 12), mat(0xc0392b, { emissive: 0x330a08 })); glut.scale.set(0.72, 0.5, 0.6); glut.position.y = -0.2; put(g, glut, 'muscle', 'pelvis', 0x330a08, 0.25);
+                // bone pelvis bowl
+                const bowl = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.55, 0.6), mat(0xeae3cf)); bowl.position.y = -0.2; put(g, bowl, 'skeleton', 'pelvis');
+                const sacrum = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 10), mat(0xeae3cf)); put(g, sacrum, 'skeleton', 'pelvis');
+            })();
+            // chest / torso
+            const chest = joint(pelvis, 'chest', 0, 0.55, 0);
+            (function () {
+                const g = chest, up = V(0, 1.15, 0);
+                const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.62, 1.15, 18), mat(SHIRT)); torso.position.y = 0.575; put(g, torso, 'skin', 'chest');
+                const shoulders = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.5, 14), mat(SHIRT)); shoulders.rotation.z = Math.PI / 2; shoulders.position.y = 1.0; put(g, shoulders, 'skin', 'chest');
+                // muscle: pecs + abs
+                [[-0.26, 0.78, 0.28], [0.26, 0.78, 0.28]].forEach(p => { const pec = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), mat(0xc0392b, { emissive: 0x330a08 })); pec.scale.set(0.3, 0.24, 0.22); pec.position.set(p[0], p[1], p[2]); put(g, pec, 'muscle', 'chest', 0x330a08, 0.25); });
+                [0.5, 0.28].forEach(y => [-0.16, 0.16].forEach(x => { const ab = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), mat(0xb83224, { emissive: 0x330a08 })); ab.scale.set(0.15, 0.13, 0.16); ab.position.set(x, y, 0.34); put(g, ab, 'muscle', 'chest', 0x330a08, 0.25); }));
+                const mtorso = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 1.0, 14), mat(0xa33024, { emissive: 0x330a08 })); mtorso.position.y = 0.6; put(g, mtorso, 'muscle', 'chest', 0x330a08, 0.2);
+                // bone: ribcage + spine
+                for (let i = 0; i < 5; i++) { const rib = new THREE.Mesh(new THREE.TorusGeometry(0.34 - i * 0.015, 0.03, 6, 16, Math.PI * 1.2), mat(0xeae3cf)); rib.rotation.x = Math.PI / 2; rib.rotation.z = -Math.PI * 0.6; rib.position.y = 0.55 + i * 0.16; put(g, rib, 'skeleton', 'chest'); }
+                for (let i = 0; i < 6; i++) { const v = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), mat(0xeae3cf)); v.position.y = 0.2 + i * 0.19; put(g, v, 'skeleton', 'chest'); }
+                const clav = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.3, 8), mat(0xeae3cf)); clav.rotation.z = Math.PI / 2; clav.position.y = 1.02; put(g, clav, 'skeleton', 'chest');
+            })();
+            // head
+            const head = joint(chest, 'head', 0, 1.15, 0);
+            (function () {
+                const g = head;
+                const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.19, 0.35, 12), mat(SKIN)); neck.position.y = 0.17; put(g, neck, 'skin', 'head');
+                const skull = new THREE.Mesh(new THREE.SphereGeometry(0.6, 20, 16), mat(SKIN)); skull.scale.set(0.92, 1.02, 0.95); skull.position.y = 0.92; put(g, skull, 'skin', 'head');
+                const hair = new THREE.Mesh(new THREE.SphereGeometry(0.64, 18, 14), mat(HAIR)); hair.scale.set(0.98, 1.0, 1.0); hair.position.set(0, 1.02, -0.06); put(g, hair, 'skin', 'head');
+                const fringe = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.34, 0.5), mat(HAIR)); fringe.position.set(0, 1.28, 0.36); fringe.rotation.x = 0.2; put(g, fringe, 'skin', 'head');
+                [-0.2, 0.2].forEach(x => { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), mat(0x2b2740)); eye.scale.set(1, 1.3, 0.5); eye.position.set(x, 0.92, 0.54); put(g, eye, 'skin', 'head'); });
+                // muscle head (face muscles) + neck muscle
+                const mneck = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.17, 0.35, 10), mat(0xc0392b, { emissive: 0x330a08 })); mneck.position.y = 0.17; put(g, mneck, 'muscle', 'head', 0x330a08, 0.22);
+                const mface = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 12), mat(0xb83224, { emissive: 0x330a08 })); mface.scale.set(0.88, 0.98, 0.9); mface.position.y = 0.92; put(g, mface, 'muscle', 'head', 0x330a08, 0.22);
+                // bone skull + cervical spine + jaw
+                const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.54, 18, 14), mat(0xeae3cf)); cranium.scale.set(0.9, 1.0, 0.94); cranium.position.y = 0.95; put(g, cranium, 'skeleton', 'head');
+                const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.22, 0.5), mat(0xe6dfca)); jaw.position.set(0, 0.66, 0.08); put(g, jaw, 'skeleton', 'head');
+                for (let i = 0; i < 3; i++) { const c = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), mat(0xeae3cf)); c.position.y = 0.12 + i * 0.14; put(g, c, 'skeleton', 'head'); }
+            })();
+            // arms
+            [['L', 1], ['R', -1]].forEach(([side, sx]) => {
+                const sh = joint(chest, 'shoulder' + side, sx * 0.66, 1.0, 0);
+                segment(sh, 'shoulder' + side, V(sx * 0.26, -1.0, 0), 0.2, SKIN, [[0.42, 0.24, 0.5]]);
+                const el = joint(sh, 'elbow' + side, sx * 0.26, -1.0, 0);
+                segment(el, 'elbow' + side, V(sx * 0.12, -0.9, 0), 0.16, SKIN, [[0.4, 0.19, 0.5]]);
+                // hand
+                const hand = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.3, 0.14), mat(SKIN)); hand.position.set(sx * 0.12, -0.9, 0); put(el, hand, 'skin', 'elbow' + side);
+                const mhand = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.24, 0.1), mat(0xb83224, { emissive: 0x330a08 })); mhand.position.copy(hand.position); put(el, mhand, 'muscle', 'elbow' + side, 0x330a08, 0.2);
+                const bhand = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.22, 0.08), mat(0xeae3cf)); bhand.position.copy(hand.position); put(el, bhand, 'skeleton', 'elbow' + side);
+            });
+            // legs
+            [['L', 1], ['R', -1]].forEach(([side, sx]) => {
+                const hip = joint(pelvis, 'hip' + side, sx * 0.36, -0.5, 0);
+                segment(hip, 'hip' + side, V(sx * 0.05, -1.5, 0), 0.29, SKIN, [[0.4, 0.34, 0.52], [0.72, 0.26, 0.34]]);
+                const knee = joint(hip, 'knee' + side, sx * 0.05, -1.5, 0);
+                segment(knee, 'knee' + side, V(0, -1.42, 0), 0.23, SKIN, [[0.36, 0.28, 0.5]]);
+                // foot
+                const foot = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.2, 0.62), mat(0x2b2f45)); foot.position.set(0, -1.46, 0.16); put(knee, foot, 'skin', 'knee' + side);
+                const bfoot = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.14, 0.5), mat(0xeae3cf)); bfoot.position.copy(foot.position); put(knee, bfoot, 'skeleton', 'knee' + side);
+                const mfoot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.16, 0.54), mat(0xb83224, { emissive: 0x330a08 })); mfoot.position.copy(foot.position); put(knee, mfoot, 'muscle', 'knee' + side, 0x330a08, 0.2);
+            });
+        }
+
+        function anaBindPointer(cv) {
+            const pick = e => {
+                const T = ANA.three; if (!T) return null;
+                const rc = cv.getBoundingClientRect();
+                const nx = ((e.clientX - rc.left) / rc.width) * 2 - 1, ny = -((e.clientY - rc.top) / rc.height) * 2 + 1;
+                T.ray.setFromCamera({ x: nx, y: ny }, T.cam);
+                const hits = T.ray.intersectObjects(T.layers[ANA.layer], false);
+                return hits.length ? hits[0].object.userData.joint : null;
+            };
+            cv.addEventListener('pointerdown', e => {
+                if (!ANA.three) return;
+                cv.setPointerCapture && cv.setPointerCapture(e.pointerId);
+                const j = pick(e);
+                if (j) { anaSelect(j); ANA.drag = { mode: 'bend', x: e.clientX, y: e.clientY }; cv.classList.add('bending'); if (ANA.anim) anaToggleAnim(); }
+                else { ANA.drag = { mode: 'orbit', x: e.clientX, y: e.clientY }; }
+            });
+            cv.addEventListener('pointermove', e => {
+                if (!ANA.drag || !ANA.three) return;
+                const dx = e.clientX - ANA.drag.x, dy = e.clientY - ANA.drag.y;
+                ANA.drag.x = e.clientX; ANA.drag.y = e.clientY;
+                if (ANA.drag.mode === 'orbit') {
+                    ANA.orb.theta -= dx * 0.008; ANA.orb.phi = Math.max(0.3, Math.min(1.7, ANA.orb.phi - dy * 0.006));
+                } else {
+                    const jt = ANA.three.joints[ANA.sel]; if (jt) {
+                        jt.rotation.x = Math.max(-2.96, Math.min(2.96, jt.rotation.x + dy * 0.01));
+                        jt.rotation.y = Math.max(-2.96, Math.min(2.96, jt.rotation.y + dx * 0.01));
+                        anaRenderSliders();
+                    }
+                }
+            });
+            const end = e => { if (ANA) ANA.drag = null; cv.classList.remove('bending'); };
+            cv.addEventListener('pointerup', end); cv.addEventListener('pointercancel', end); window.addEventListener('pointerup', end);
+            cv.addEventListener('wheel', e => { if (!ANA.three) return; e.preventDefault(); ANA.orb.r = Math.max(6, Math.min(24, ANA.orb.r * (e.deltaY > 0 ? 1.09 : 0.92))); }, { passive: false });
+        }
+
+        function anaLoop(ts) {
+            const cv = document.getElementById('anaCanvas');
+            if (!cv || !ANA || cv.offsetParent === null) { anaDispose3D(); return; }
+            const dt = Math.min(0.05, ANA.last ? (ts - ANA.last) / 1000 : 0.016); ANA.last = ts;
+            if (!ANA.three && !ANA.no3d) anaInit3D(cv);
+            if (ANA.three) {
+                const T = ANA.three, W = cv.clientWidth;
+                if (T._w !== W) { T._w = W; T.renderer.setSize(W, 500, false); T.cam.aspect = W / 500; T.cam.updateProjectionMatrix(); }
+                const dark = document.body.classList.contains('dark-theme');
+                (T.scene.background = T.scene.background || new THREE.Color()).set(dark ? 0x121a30 : 0xe6eeff);
+                if (ANA.anim) { ANA.animT += dt; anaWalk(ANA.animT); }
+                const o = ANA.orb;
+                T.cam.position.set(o.r * Math.sin(o.phi) * Math.sin(o.theta), 0.4 + o.r * Math.cos(o.phi) * 0.6, o.r * Math.sin(o.phi) * Math.cos(o.theta));
+                T.cam.lookAt(0, 0.2, 0);
+                T.renderer.render(T.scene, T.cam);
+            }
+            ANA.raf = requestAnimationFrame(anaLoop);
         }
 
         function renderTugStrategy(container) { TUG = null; tugRenderSetup(container); }
