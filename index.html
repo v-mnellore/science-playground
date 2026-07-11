@@ -10273,14 +10273,16 @@ function drawCaesarCipher(ctx, c){
             sit: { hipL: [-92, 0, 4], hipR: [-92, 0, -4], kneeL: [96, 0, 0], kneeR: [96, 0, 0], chest: [8, 0, 0], shoulderL: [-14, 0, 10], shoulderR: [-14, 0, -10] },
             run: { hipL: [42, 0, 0], kneeL: [-52, 0, 0], hipR: [-34, 0, 0], kneeR: [-84, 0, 0], shoulderL: [-38, 0, 10], elbowL: [0, 0, 74], shoulderR: [40, 0, -10], elbowR: [0, 0, -74], chest: [12, 6, 0], head: [-6, 0, 0] },
             // martial-arts guard: both fists raised, torso squared, wide braced legs
-            fight: { shoulderR: [-80, 0, -16], elbowR: [0, 0, -104], shoulderL: [-80, 0, 16], elbowL: [0, 0, 104], hipR: [16, -18, -16], kneeR: [-40, 0, 0], hipL: [-30, 18, 16], kneeL: [-64, 0, 0], chest: [10, 0, 0], head: [-4, 0, 0] }
+            fight: { shoulderR: [-80, 0, -16], elbowR: [0, 0, -104], shoulderL: [-80, 0, 16], elbowL: [0, 0, 104], hipR: [16, -18, -16], kneeR: [-40, 0, 0], hipL: [-30, 18, 16], kneeL: [-64, 0, 0], chest: [10, 0, 0], head: [-4, 0, 0] },
+            // signature hero stance: right palm thrust forward/up, left fist chambered low, deep lunge, torso twisted
+            hero: { shoulderR: [-104, 12, -22], elbowR: [0, 18, -14], shoulderL: [34, 0, 34], elbowL: [0, 0, 98], hipR: [18, -22, -16], kneeR: [-28, 0, 0], hipL: [-36, 22, 16], kneeL: [-58, 0, 0], chest: [12, -24, 0], head: [4, 22, 0] }
         };
         const AN_D2R = Math.PI / 180;
 
         function renderAnatomy(container) {
             if (ANA && ANA.raf) cancelAnimationFrame(ANA.raf);
             anaDispose3D();
-            ANA = { sel: 'shoulderR', layer: 'skin', anim: null, animT: 0, idleT: 0, blinkT: 0, last: 0, raf: 0, three: null, no3d: false, orb: { theta: 0.0, phi: 1.15, r: 11, drag: null } };
+            ANA = { sel: 'shoulderR', layer: 'skin', anim: null, float: true, animT: 0, idleT: 0, blinkT: 0, last: 0, raf: 0, three: null, no3d: false, orb: { theta: 0.0, phi: 1.15, r: 11, drag: null } };
             container.innerHTML =
                 '<div class="af-wrap">' +
                     '<div class="af-top">' +
@@ -10314,10 +10316,11 @@ function drawCaesarCipher(ctx, c){
         function anaRenderSide() {
             const side = document.getElementById('anaSide'); if (!side) return;
             let h = '<div class="an-side-h">Poses</div><div class="af-top" style="gap:6px;margin:0">';
-            [['relax', '🧍 Relax'], ['fight', '🥋 Fight'], ['tpose', '✝ T-pose'], ['wave', '👋 Wave'], ['sit', '🪑 Sit'], ['run', '🏃 Run']].forEach(p => {
+            [['hero', '🔥 Hero'], ['relax', '🧍 Relax'], ['fight', '🥋 Fight'], ['tpose', '✝ T-pose'], ['wave', '👋 Wave'], ['sit', '🪑 Sit'], ['run', '🏃 Run']].forEach(p => {
                 h += '<button class="an-chipbtn" data-pose="' + p[0] + '">' + p[1] + '</button>';
             });
             h += '</div><div class="an-side-h">Animate</div><div class="af-top" style="gap:6px;margin:0">';
+            h += '<button class="an-chipbtn" id="anaFloat" data-float="1">🧘 Float</button>';
             h += '<button class="an-chipbtn" data-anim="walk">🚶 Walk</button>';
             h += '<button class="an-chipbtn" data-anim="fight">🥊 Shadowbox</button></div>';
             h += '<div class="an-side-h">Joint</div>';
@@ -10330,6 +10333,7 @@ function drawCaesarCipher(ctx, c){
             side.querySelectorAll('[data-pose]').forEach(b => b.onclick = () => anaApplyPose(b.getAttribute('data-pose')));
             side.querySelectorAll('[data-j]').forEach(b => b.onclick = () => anaSelect(b.getAttribute('data-j')));
             side.querySelectorAll('[data-anim]').forEach(b => { b.classList.toggle('on', ANA.anim === b.getAttribute('data-anim')); b.onclick = () => anaSetAnim(b.getAttribute('data-anim')); });
+            const fb = document.getElementById('anaFloat'); if (fb) { fb.classList.toggle('on', ANA.float); fb.onclick = () => { ANA.float = !ANA.float; fb.classList.toggle('on', ANA.float); SFX.play('toggle'); }; }
             anaRenderSliders();
         }
         function anaRenderSliders() {
@@ -10441,13 +10445,20 @@ function drawCaesarCipher(ctx, c){
             const rim = new THREE.DirectionalLight(0xcfebff, 0.5); rim.position.set(2, 4, -5); scene.add(rim);
             const T = ANA.three = { renderer, scene, cam, root: new THREE.Group(), joints: {}, layers: { skin: [], muscle: [], skeleton: [] }, meshes: [], ray: new THREE.Raycaster() };
             scene.add(T.root);
-            // subtle ground disc for grounding
+            // ground disc stays in the SCENE (not T.root) so the figure can float above it
             const ground = new THREE.Mesh(new THREE.CylinderGeometry(3.4, 3.4, 0.18, 40),
                 new THREE.MeshStandardMaterial({ color: 0xb9c6e6, roughness: 0.95 }));
-            ground.position.y = -3.55; T.root.add(ground);
+            ground.position.y = -3.55; scene.add(ground);
+            // ki aura (flame cone around the figure) + a glowing pool beneath — shown while floating
+            const aura = new THREE.Mesh(new THREE.ConeGeometry(1.3, 4.4, 24, 1, true),
+                new THREE.MeshBasicMaterial({ color: 0x9fdcff, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+            aura.position.y = 0.3; T.aura = aura; T.root.add(aura);
+            const glow = new THREE.Mesh(new THREE.CircleGeometry(1.3, 28),
+                new THREE.MeshBasicMaterial({ color: 0x8fc2ff, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false }));
+            glow.rotation.x = -Math.PI / 2; glow.position.y = -3.45; T.glow = glow; scene.add(glow);
             anaBuildFigure(T);
             anaSetLayer(ANA.layer);
-            anaApplyPose('relax', true, true);   // snap the starting pose (no glide on first paint)
+            anaApplyPose('hero', true, true);   // start in the dynamic hero stance (no glide on first paint)
             anaHighlight();
         }
         function anaFallback() {
@@ -10597,13 +10608,15 @@ function drawCaesarCipher(ctx, c){
                 const cap = mk(new THREE.SphereGeometry(0.7, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.5), HAIR); cap.scale.set(1.06, 0.9, 1.05); cap.position.set(0, 1.12, -0.12); cap.rotation.x = -0.16; skin(g, cap, 'head', { s: 1.03 });
                 // hair wraps ONLY the back hemisphere (phi π..2π) so the nape isn't bald and the face stays clear
                 const backHair = mk(new THREE.SphereGeometry(0.62, 16, 12, Math.PI, Math.PI, Math.PI * 0.28, Math.PI * 0.6), HAIR); backHair.scale.set(1.06, 1.0, 1.04); backHair.position.set(0, 1.04, -0.06); skin(g, backHair, 'head', { s: 1.03 });
-                // [x, y, z, rotX, rotZ, height]
-                [[0, 1.66, -0.05, 0, 0, 0.85], [-0.2, 1.62, -0.02, 0, 0.22, 0.8], [0.2, 1.62, -0.02, 0, -0.22, 0.8],
-                [-0.42, 1.5, -0.05, 0, 0.5, 0.72], [0.42, 1.5, -0.05, 0, -0.5, 0.72],
-                [-0.52, 1.32, -0.1, -0.2, 0.85, 0.66], [0.52, 1.32, -0.1, -0.2, -0.85, 0.66],
-                [-0.3, 1.52, -0.36, -0.5, 0.3, 0.7], [0.3, 1.52, -0.36, -0.5, -0.3, 0.7], [0, 1.56, -0.42, -0.6, 0, 0.72],
-                [-0.16, 1.36, 0.44, 2.7, 0.15, 0.5], [0.16, 1.36, 0.44, 2.7, -0.15, 0.5], [0, 1.42, 0.5, 2.85, 0, 0.46]].forEach((s, i) => {
-                    const c = mk(new THREE.ConeGeometry(0.17, s[5], 6), i % 4 === 0 ? HAIRHI : HAIR); c.position.set(s[0], s[1], s[2]); c.rotation.x = s[3]; c.rotation.z = s[4]; skin(g, c, 'head', { s: 1.04 });
+                // big dramatic starburst mane. [x, y, z, rotX, rotZ, height]
+                [[0, 1.74, -0.05, 0, 0, 1.35], [-0.18, 1.68, -0.02, 0, 0.16, 1.22], [0.18, 1.68, -0.02, 0, -0.16, 1.22],
+                [-0.37, 1.58, -0.05, -0.1, 0.38, 1.06], [0.37, 1.58, -0.05, -0.1, -0.38, 1.06],
+                [-0.53, 1.42, -0.06, -0.12, 0.72, 0.96], [0.53, 1.42, -0.06, -0.12, -0.72, 0.96],
+                [-0.62, 1.2, -0.08, -0.08, 1.02, 0.82], [0.62, 1.2, -0.08, -0.08, -1.02, 0.82],
+                [-0.28, 1.6, -0.4, -0.6, 0.28, 1.05], [0.28, 1.6, -0.4, -0.6, -0.28, 1.05], [0, 1.66, -0.46, -0.72, 0, 1.12],
+                [-0.5, 1.32, -0.42, -0.5, 0.62, 0.88], [0.5, 1.32, -0.42, -0.5, -0.62, 0.88],
+                [-0.18, 1.42, 0.44, 2.72, 0.12, 0.62], [0.18, 1.42, 0.44, 2.72, -0.12, 0.62], [0, 1.48, 0.5, 2.86, 0, 0.66]].forEach((s, i) => {
+                    const c = mk(new THREE.ConeGeometry(0.2, s[5], 6), i % 5 === 0 ? HAIRHI : HAIR); c.position.set(s[0], s[1], s[2]); c.rotation.x = s[3]; c.rotation.z = s[4]; skin(g, c, 'head', { s: 1.035 });
                 });
                 // muscle head + neck
                 const mneck = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.32, 10), mat(0xd14848, { emissive: 0x330a08 })); mneck.position.y = 0.16; put(g, mneck, 'muscle', 'head', 0x330a08, 0.22);
@@ -10613,6 +10626,7 @@ function drawCaesarCipher(ctx, c){
                 const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.2, 0.48), mat(0xe6dfca)); jaw.position.set(0, 0.72, 0.08); put(g, jaw, 'skeleton', 'head');
                 for (let i = 0; i < 3; i++) { const c = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), mat(0xeae3cf)); c.position.y = 0.1 + i * 0.14; put(g, c, 'skeleton', 'head'); }
             })();
+            head.scale.setScalar(0.9);   // slightly smaller head → more heroic (less chibi) proportions
             // arms — bare, muscular (tan) with a blue wristband near each hand
             [['L', 1], ['R', -1]].forEach(([side, sx]) => {
                 const sh = joint(chest, 'shoulder' + side, sx * 0.62, 0.95, 0);
@@ -10701,9 +10715,9 @@ function drawCaesarCipher(ctx, c){
                     j.rotation.y += (u.ty - j.rotation.y) * k;
                     j.rotation.z += (u.tz - j.rotation.z) * k;
                 }
+                ANA.idleT += dt;
                 // gentle idle breathing when standing still (adds life without fighting the pose)
                 if (!ANA.anim && !ANA.drag) {
-                    ANA.idleT += dt;
                     const br = Math.sin(ANA.idleT * 1.5) * 0.02;
                     if (T.joints.chest) T.joints.chest.rotation.x += br;
                     if (T.joints.head) T.joints.head.rotation.x -= br * 0.5;
@@ -10715,11 +10729,21 @@ function drawCaesarCipher(ctx, c){
                     const bs = cyc < 0.14 ? 1 - Math.sin((cyc / 0.14) * Math.PI) * 0.9 : 1;
                     T.eyes.forEach(e => e.scale.y = bs);
                 }
-                // vertical bob during locomotion
-                T.root.position.y = ANA.anim ? Math.abs(Math.sin(ANA.animT * 3.4)) * 0.05 : 0;
-                const o = ANA.orb;
-                T.cam.position.set(o.r * Math.sin(o.phi) * Math.sin(o.theta), 0.4 + o.r * Math.cos(o.phi) * 0.6, o.r * Math.sin(o.phi) * Math.cos(o.theta));
-                T.cam.lookAt(0, 0.2, 0);
+                // float / hover height with a gentle bob, plus a locomotion bob
+                let fy = 0;
+                if (ANA.float) fy = 1.0 + Math.sin(ANA.idleT * 1.2) * 0.14;
+                if (ANA.anim) fy += Math.abs(Math.sin(ANA.animT * 3.4)) * 0.05;
+                T.root.position.y = fy;
+                // ki aura + ground glow pulse while floating
+                if (T.aura) {
+                    T.aura.visible = ANA.float;
+                    if (ANA.float) { T.aura.material.opacity = 0.14 + Math.sin(ANA.idleT * 3) * 0.06; const ap = 1 + Math.sin(ANA.idleT * 2.3) * 0.05; T.aura.scale.set(ap, 1 + Math.sin(ANA.idleT * 1.7) * 0.06, ap); T.aura.rotation.y += dt * 0.6; }
+                }
+                if (T.glow) { T.glow.visible = ANA.float; if (ANA.float) T.glow.material.opacity = 0.18 + Math.sin(ANA.idleT * 3) * 0.07; }
+                // camera follows the figure's float height
+                const o = ANA.orb, foc = 0.2 + fy * 0.7;
+                T.cam.position.set(o.r * Math.sin(o.phi) * Math.sin(o.theta), 0.4 + foc * 0.6 + o.r * Math.cos(o.phi) * 0.6, o.r * Math.sin(o.phi) * Math.cos(o.theta));
+                T.cam.lookAt(0, foc, 0);
                 T.renderer.render(T.scene, T.cam);
             }
             ANA.raf = requestAnimationFrame(anaLoop);
