@@ -10483,72 +10483,90 @@ function drawCaesarCipher(ctx, c){
                 const knobB = new THREE.Mesh(new THREE.SphereGeometry(r * 0.46, 12, 10), mat(0xeae3cf)); knobB.position.copy(vec); put(group, knobB, 'skeleton', jointName);
             }
 
-            const SKIN = 0xffc196, SHIRT = 0x5b7cf0, SHORTS = 0x33405c, HAIR = 0x2a2732;
+            const SKIN = 0xffd9b3, SHIRT = 0x4169e1, SHORTS = 0x2b3e5f, HAIR = 0x1a1a2e, EYES_WHITE = 0xffffff, IRIS = 0x4a90e2;
             // pelvis (root)
             const pelvis = joint(T.root, 'pelvis', 0, 0, 0);
             (function () {
                 const g = pelvis;
-                // skin/shorts hips
-                const hips = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.8, 0.85), mat(SHORTS)); hips.position.y = -0.15; put(g, hips, 'skin', 'pelvis');
+                // skin/shorts hips — narrower for anime style
+                const hips = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.7, 0.75), mat(SHORTS)); hips.position.y = -0.15; put(g, hips, 'skin', 'pelvis');
                 // muscle glutes/abs
-                const glut = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 12), mat(0xc0392b, { emissive: 0x330a08 })); glut.scale.set(0.72, 0.5, 0.6); glut.position.y = -0.2; put(g, glut, 'muscle', 'pelvis', 0x330a08, 0.25);
+                const glut = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 12), mat(0xd14848, { emissive: 0x330a08 })); glut.scale.set(0.6, 0.45, 0.55); glut.position.y = -0.2; put(g, glut, 'muscle', 'pelvis', 0x330a08, 0.25);
                 // bone pelvis bowl
-                const bowl = new THREE.Mesh(new THREE.BoxGeometry(1.25, 0.55, 0.6), mat(0xeae3cf)); bowl.position.y = -0.2; put(g, bowl, 'skeleton', 'pelvis');
-                const sacrum = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 10), mat(0xeae3cf)); put(g, sacrum, 'skeleton', 'pelvis');
+                const bowl = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.5, 0.55), mat(0xeae3cf)); bowl.position.y = -0.2; put(g, bowl, 'skeleton', 'pelvis');
+                const sacrum = new THREE.Mesh(new THREE.SphereGeometry(0.25, 12, 10), mat(0xeae3cf)); put(g, sacrum, 'skeleton', 'pelvis');
             })();
             // chest / torso
-            const chest = joint(pelvis, 'chest', 0, 0.55, 0);
+            const chest = joint(pelvis, 'chest', 0, 0.5, 0);
             (function () {
-                const g = chest, up = V(0, 1.15, 0);
-                const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.62, 1.15, 18), mat(SHIRT)); torso.position.y = 0.575; put(g, torso, 'skin', 'chest');
-                const shoulders = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.5, 14), mat(SHIRT)); shoulders.rotation.z = Math.PI / 2; shoulders.position.y = 1.0; put(g, shoulders, 'skin', 'chest');
+                const g = chest;
+                // anime-style shirt with collar
+                const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.48, 0.58, 1.1, 20), mat(SHIRT)); torso.position.y = 0.55; put(g, torso, 'skin', 'chest');
+                // sailor-style collar
+                const collar = new THREE.Mesh(new THREE.ConeGeometry(0.62, 0.22, 16), mat(0xffffff)); collar.position.y = 1.08; put(g, collar, 'skin', 'chest');
+                const shoulders = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 1.4, 14), mat(SHIRT)); shoulders.rotation.z = Math.PI / 2; shoulders.position.y = 0.95; put(g, shoulders, 'skin', 'chest');
                 // muscle: pecs + abs
-                [[-0.26, 0.78, 0.28], [0.26, 0.78, 0.28]].forEach(p => { const pec = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), mat(0xc0392b, { emissive: 0x330a08 })); pec.scale.set(0.3, 0.24, 0.22); pec.position.set(p[0], p[1], p[2]); put(g, pec, 'muscle', 'chest', 0x330a08, 0.25); });
-                [0.5, 0.28].forEach(y => [-0.16, 0.16].forEach(x => { const ab = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), mat(0xb83224, { emissive: 0x330a08 })); ab.scale.set(0.15, 0.13, 0.16); ab.position.set(x, y, 0.34); put(g, ab, 'muscle', 'chest', 0x330a08, 0.25); }));
-                const mtorso = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 1.0, 14), mat(0xa33024, { emissive: 0x330a08 })); mtorso.position.y = 0.6; put(g, mtorso, 'muscle', 'chest', 0x330a08, 0.2);
+                [[-0.22, 0.7, 0.25], [0.22, 0.7, 0.25]].forEach(p => { const pec = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), mat(0xd14848, { emissive: 0x330a08 })); pec.scale.set(0.28, 0.22, 0.2); pec.position.set(p[0], p[1], p[2]); put(g, pec, 'muscle', 'chest', 0x330a08, 0.25); });
+                [0.45, 0.2].forEach(y => [-0.14, 0.14].forEach(x => { const ab = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), mat(0xc94a4a, { emissive: 0x330a08 })); ab.scale.set(0.13, 0.12, 0.15); ab.position.set(x, y, 0.33); put(g, ab, 'muscle', 'chest', 0x330a08, 0.25); }));
+                const mtorso = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.48, 0.95, 16), mat(0xb84040, { emissive: 0x330a08 })); mtorso.position.y = 0.55; put(g, mtorso, 'muscle', 'chest', 0x330a08, 0.2);
                 // bone: ribcage + spine
-                for (let i = 0; i < 5; i++) { const rib = new THREE.Mesh(new THREE.TorusGeometry(0.34 - i * 0.015, 0.03, 6, 16, Math.PI * 1.2), mat(0xeae3cf)); rib.rotation.x = Math.PI / 2; rib.rotation.z = -Math.PI * 0.6; rib.position.y = 0.55 + i * 0.16; put(g, rib, 'skeleton', 'chest'); }
-                for (let i = 0; i < 6; i++) { const v = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), mat(0xeae3cf)); v.position.y = 0.2 + i * 0.19; put(g, v, 'skeleton', 'chest'); }
-                const clav = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.3, 8), mat(0xeae3cf)); clav.rotation.z = Math.PI / 2; clav.position.y = 1.02; put(g, clav, 'skeleton', 'chest');
+                for (let i = 0; i < 5; i++) { const rib = new THREE.Mesh(new THREE.TorusGeometry(0.32 - i * 0.014, 0.03, 6, 16, Math.PI * 1.2), mat(0xeae3cf)); rib.rotation.x = Math.PI / 2; rib.rotation.z = -Math.PI * 0.6; rib.position.y = 0.5 + i * 0.15; put(g, rib, 'skeleton', 'chest'); }
+                for (let i = 0; i < 6; i++) { const v = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), mat(0xeae3cf)); v.position.y = 0.15 + i * 0.18; put(g, v, 'skeleton', 'chest'); }
+                const clav = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.25, 8), mat(0xeae3cf)); clav.rotation.z = Math.PI / 2; clav.position.y = 0.98; put(g, clav, 'skeleton', 'chest');
             })();
-            // head
+            // head — larger, more anime-proportioned
             const head = joint(chest, 'head', 0, 1.15, 0);
             (function () {
                 const g = head;
-                const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.19, 0.35, 12), mat(SKIN)); neck.position.y = 0.17; put(g, neck, 'skin', 'head');
-                const skull = new THREE.Mesh(new THREE.SphereGeometry(0.6, 20, 16), mat(SKIN)); skull.scale.set(0.92, 1.02, 0.95); skull.position.y = 0.92; put(g, skull, 'skin', 'head');
-                const hair = new THREE.Mesh(new THREE.SphereGeometry(0.64, 18, 14), mat(HAIR)); hair.scale.set(0.98, 1.0, 1.0); hair.position.set(0, 1.02, -0.06); put(g, hair, 'skin', 'head');
-                const fringe = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.34, 0.5), mat(HAIR)); fringe.position.set(0, 1.28, 0.36); fringe.rotation.x = 0.2; put(g, fringe, 'skin', 'head');
-                [-0.2, 0.2].forEach(x => { const eye = new THREE.Mesh(new THREE.SphereGeometry(0.09, 10, 8), mat(0x2b2740)); eye.scale.set(1, 1.3, 0.5); eye.position.set(x, 0.92, 0.54); put(g, eye, 'skin', 'head'); });
-                // muscle head (face muscles) + neck muscle
-                const mneck = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.17, 0.35, 10), mat(0xc0392b, { emissive: 0x330a08 })); mneck.position.y = 0.17; put(g, mneck, 'muscle', 'head', 0x330a08, 0.22);
-                const mface = new THREE.Mesh(new THREE.SphereGeometry(0.55, 16, 12), mat(0xb83224, { emissive: 0x330a08 })); mface.scale.set(0.88, 0.98, 0.9); mface.position.y = 0.92; put(g, mface, 'muscle', 'head', 0x330a08, 0.22);
-                // bone skull + cervical spine + jaw
-                const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.54, 18, 14), mat(0xeae3cf)); cranium.scale.set(0.9, 1.0, 0.94); cranium.position.y = 0.95; put(g, cranium, 'skeleton', 'head');
-                const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.22, 0.5), mat(0xe6dfca)); jaw.position.set(0, 0.66, 0.08); put(g, jaw, 'skeleton', 'head');
-                for (let i = 0; i < 3; i++) { const c = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), mat(0xeae3cf)); c.position.y = 0.12 + i * 0.14; put(g, c, 'skeleton', 'head'); }
+                const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.32, 12), mat(SKIN)); neck.position.y = 0.16; put(g, neck, 'skin', 'head');
+                // bigger head for anime
+                const skull = new THREE.Mesh(new THREE.SphereGeometry(0.68, 22, 18), mat(SKIN)); skull.scale.set(0.95, 1.1, 0.98); skull.position.y = 1.0; put(g, skull, 'skin', 'head');
+                // stylized spiky hair
+                const hairBack = new THREE.Mesh(new THREE.SphereGeometry(0.72, 20, 16), mat(HAIR)); hairBack.scale.set(1.0, 1.08, 1.02); hairBack.position.set(0, 1.1, -0.08); put(g, hairBack, 'skin', 'head');
+                const hairSpike1 = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.4, 8), mat(HAIR)); hairSpike1.position.set(-0.3, 1.5, -0.1); hairSpike1.rotation.z = -0.3; put(g, hairSpike1, 'skin', 'head');
+                const hairSpike2 = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.4, 8), mat(HAIR)); hairSpike2.position.set(0.3, 1.5, -0.1); hairSpike2.rotation.z = 0.3; put(g, hairSpike2, 'skin', 'head');
+                const fringe = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.35, 0.45), mat(HAIR)); fringe.position.set(0, 1.32, 0.4); fringe.rotation.x = 0.15; put(g, fringe, 'skin', 'head');
+                // BIG expressive anime eyes with shine
+                for (const x of [-0.22, 0.22]) {
+                    // eye white
+                    const eyeW = new THREE.Mesh(new THREE.SphereGeometry(0.115, 14, 12), mat(EYES_WHITE)); eyeW.position.set(x, 1.0, 0.58); put(g, eyeW, 'skin', 'head');
+                    // iris
+                    const iris = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 10), mat(IRIS)); iris.position.set(x, 0.98, 0.595); put(g, iris, 'skin', 'head');
+                    // shine dot
+                    const shine = new THREE.Mesh(new THREE.SphereGeometry(0.032, 8, 6), mat(0xffffff, { emissive: 0x999999 })); shine.position.set(x - 0.025, 1.01, 0.6); put(g, shine, 'skin', 'head', 0x999999, 0.5);
+                }
+                // mouth — subtle
+                const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.08, 0.08), mat(0xe088a0)); mouth.position.set(0, 0.8, 0.58); put(g, mouth, 'skin', 'head');
+                // muscle head + neck
+                const mneck = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 0.32, 10), mat(0xd14848, { emissive: 0x330a08 })); mneck.position.y = 0.16; put(g, mneck, 'muscle', 'head', 0x330a08, 0.22);
+                const mface = new THREE.Mesh(new THREE.SphereGeometry(0.62, 18, 14), mat(0xc94a4a, { emissive: 0x330a08 })); mface.scale.set(0.92, 1.05, 0.94); mface.position.y = 1.0; put(g, mface, 'muscle', 'head', 0x330a08, 0.22);
+                // bone skull + cervical spine
+                const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.62, 20, 16), mat(0xeae3cf)); cranium.scale.set(0.93, 1.08, 0.96); cranium.position.y = 1.02; put(g, cranium, 'skeleton', 'head');
+                const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.2, 0.48), mat(0xe6dfca)); jaw.position.set(0, 0.72, 0.08); put(g, jaw, 'skeleton', 'head');
+                for (let i = 0; i < 3; i++) { const c = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), mat(0xeae3cf)); c.position.y = 0.1 + i * 0.14; put(g, c, 'skeleton', 'head'); }
             })();
-            // arms
+            // arms — slimmer for anime
             [['L', 1], ['R', -1]].forEach(([side, sx]) => {
-                const sh = joint(chest, 'shoulder' + side, sx * 0.66, 1.0, 0);
-                segment(sh, 'shoulder' + side, V(sx * 0.26, -1.0, 0), 0.2, SKIN, [[0.42, 0.24, 0.5]]);
-                const el = joint(sh, 'elbow' + side, sx * 0.26, -1.0, 0);
-                segment(el, 'elbow' + side, V(sx * 0.12, -0.9, 0), 0.16, SKIN, [[0.4, 0.19, 0.5]]);
-                // hand
-                const hand = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.3, 0.14), mat(SKIN)); hand.position.set(sx * 0.12, -0.9, 0); put(el, hand, 'skin', 'elbow' + side);
-                const mhand = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.24, 0.1), mat(0xb83224, { emissive: 0x330a08 })); mhand.position.copy(hand.position); put(el, mhand, 'muscle', 'elbow' + side, 0x330a08, 0.2);
-                const bhand = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.22, 0.08), mat(0xeae3cf)); bhand.position.copy(hand.position); put(el, bhand, 'skeleton', 'elbow' + side);
+                const sh = joint(chest, 'shoulder' + side, sx * 0.62, 0.95, 0);
+                segment(sh, 'shoulder' + side, V(sx * 0.24, -0.95, 0), 0.18, SKIN, [[0.42, 0.22, 0.5]]);
+                const el = joint(sh, 'elbow' + side, sx * 0.24, -0.95, 0);
+                segment(el, 'elbow' + side, V(sx * 0.1, -0.88, 0), 0.14, SKIN, [[0.4, 0.18, 0.5]]);
+                // hand — rounded for friendlier look
+                const hand = new THREE.Mesh(new THREE.SphereGeometry(0.12, 10, 8), mat(SKIN)); hand.scale.set(0.8, 1.1, 0.7); hand.position.set(sx * 0.1, -0.88, 0); put(el, hand, 'skin', 'elbow' + side);
+                const mhand = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), mat(0xc94a4a, { emissive: 0x330a08 })); mhand.scale.set(0.7, 1.0, 0.6); mhand.position.copy(hand.position); put(el, mhand, 'muscle', 'elbow' + side, 0x330a08, 0.2);
+                const bhand = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), mat(0xeae3cf)); bhand.scale.set(0.65, 0.95, 0.55); bhand.position.copy(hand.position); put(el, bhand, 'skeleton', 'elbow' + side);
             });
-            // legs
+            // legs — LONGER for anime style (more leg-to-body ratio)
             [['L', 1], ['R', -1]].forEach(([side, sx]) => {
-                const hip = joint(pelvis, 'hip' + side, sx * 0.36, -0.5, 0);
-                segment(hip, 'hip' + side, V(sx * 0.05, -1.5, 0), 0.29, SKIN, [[0.4, 0.34, 0.52], [0.72, 0.26, 0.34]]);
-                const knee = joint(hip, 'knee' + side, sx * 0.05, -1.5, 0);
-                segment(knee, 'knee' + side, V(0, -1.42, 0), 0.23, SKIN, [[0.36, 0.28, 0.5]]);
-                // foot
-                const foot = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.2, 0.62), mat(0x2b2f45)); foot.position.set(0, -1.46, 0.16); put(knee, foot, 'skin', 'knee' + side);
-                const bfoot = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.14, 0.5), mat(0xeae3cf)); bfoot.position.copy(foot.position); put(knee, bfoot, 'skeleton', 'knee' + side);
-                const mfoot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.16, 0.54), mat(0xb83224, { emissive: 0x330a08 })); mfoot.position.copy(foot.position); put(knee, mfoot, 'muscle', 'knee' + side, 0x330a08, 0.2);
+                const hip = joint(pelvis, 'hip' + side, sx * 0.33, -0.45, 0);
+                segment(hip, 'hip' + side, V(sx * 0.04, -1.8, 0), 0.27, SKIN, [[0.38, 0.36, 0.54], [0.7, 0.27, 0.36]]);
+                const knee = joint(hip, 'knee' + side, sx * 0.04, -1.8, 0);
+                segment(knee, 'knee' + side, V(0, -1.62, 0), 0.21, SKIN, [[0.35, 0.3, 0.5]]);
+                // foot — anime school shoes
+                const foot = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.18, 0.58), mat(0x1a1a2e)); foot.position.set(0, -1.68, 0.15); put(knee, foot, 'skin', 'knee' + side);
+                const footBand = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.06, 0.6), mat(0xffffff)); footBand.position.set(0, -1.63, 0.15); put(knee, footBand, 'skin', 'knee' + side);
+                const bfoot = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.13, 0.48), mat(0xeae3cf)); bfoot.position.copy(foot.position); put(knee, bfoot, 'skeleton', 'knee' + side);
+                const mfoot = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.15, 0.52), mat(0xc94a4a, { emissive: 0x330a08 })); mfoot.position.copy(foot.position); put(knee, mfoot, 'muscle', 'knee' + side, 0x330a08, 0.2);
             });
         }
 
