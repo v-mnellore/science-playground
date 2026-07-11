@@ -873,6 +873,16 @@
         .ai-in:focus { outline: none; border-color: var(--primary); }
         .ai-send { border: none; border-radius: 12px; padding: 0 20px; font-weight: 800; cursor: pointer; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; }
         .ai-send:disabled { opacity: 0.5; cursor: default; }
+        .ai-imgbtn { border: 2px solid var(--border-light); border-radius: 12px; padding: 0 12px; font-size: 1.15em; cursor: pointer; background: var(--bg-white); }
+        .ai-imgbtn:hover { border-color: var(--primary); }
+        .ai-imgbub { padding: 6px !important; }
+        .ai-img { display: block; width: 100%; max-width: 320px; border-radius: 12px; }
+        .ai-imgcap { font-size: 0.78em; color: var(--text-light); margin-top: 6px; padding: 0 4px 2px; }
+        /* ===== Sci 3D talking face ===== */
+        .ai-face-wrap { position: relative; display: flex; justify-content: center; align-items: center; padding: 6px 0 2px; background: linear-gradient(180deg, rgba(102,126,234,0.10), transparent); }
+        #aiFaceCanvas { width: 132px; height: 108px; display: block; }
+        .ai-face-badge { position: absolute; bottom: 4px; right: 12px; font-size: 0.7em; font-weight: 800; color: var(--primary); background: var(--bg-white); border-radius: 999px; padding: 2px 9px; box-shadow: var(--shadow); opacity: 0; transition: opacity 0.2s; }
+        .ai-face-badge.on { opacity: 1; }
         .ai-setup { flex: 1; overflow-y: auto; padding: 22px; font-size: 0.92em; line-height: 1.6; color: var(--text-dark); }
         .ai-setup h3 { margin: 0 0 10px; }
         .ai-setup ol { padding-left: 20px; margin: 10px 0; }
@@ -9333,6 +9343,12 @@ function drawCaesarCipher(ctx, c){
             return (c >= 0 && c < AF_COLS && r >= 0 && r < AF_ROWS) ? { c, r } : null;
         }
         function afCanvasHover(e) { if (AF && AF.mode === 'build') AF.hover = afCellAt(e); }
+        // A cell can hold a part if the grid is empty (first part) or it orthogonally touches an existing part,
+        // so the plane is always ONE connected piece — parts never float detached.
+        function afAdjacentToPart(c, r) {
+            if (AF.grid.size === 0) return true;
+            return AF.grid.has((c - 1) + ',' + r) || AF.grid.has((c + 1) + ',' + r) || AF.grid.has(c + ',' + (r - 1)) || AF.grid.has(c + ',' + (r + 1));
+        }
         function afCanvasClick(e, erase) {
             if (!AF || AF.mode !== 'build') return;
             if (AF._dragged) { AF._dragged = false; return; }   // that "click" was an orbit drag
@@ -9345,6 +9361,7 @@ function drawCaesarCipher(ctx, c){
             const st = afComputeStats(), p = AF_PARTS[AF.sel];
             if (AF.grid.has(key)) { afMsg('That cell is occupied — right-click (or use the 🧽 Eraser) to remove parts.'); return; }
             if (AF.sel === 'cockpit' && st.cockpits >= 1) { SFX.play('error'); afMsg('Only one 🧑‍✈️ Cockpit — the pilot gets lonely with two seats.'); return; }
+            if (!afAdjacentToPart(cell.c, cell.r)) { SFX.play('error'); afMsg('🔗 Parts must attach! Place this touching an existing part (no floating pieces).'); return; }
             if (st.cost + p.cost > AF_BUDGET) { SFX.play('error'); afMsg('💰 Over budget! That ' + p.name + ' costs ' + p.cost + ' pts but only ' + (AF_BUDGET - st.cost) + ' remain.'); return; }
             afSnapshot();
             AF.grid.set(key, AF.sel);
@@ -9835,18 +9852,20 @@ function drawCaesarCipher(ctx, c){
             [...T.cellMeshes.keys()].forEach(k => { if (!seen.has(k)) { T.buildRoot.remove(T.cellMeshes.get(k)); T.cellMeshes.delete(k); } });
             // spin props slowly on the bench
             T.cellMeshes.forEach(m => { if (m.userData.spin) m.userData.spin.rotation.x += dt * 2; if (m.userData.flame) m.userData.flame.visible = false; });
-            // ghost + markers
+            // ghost + markers — green where a part will attach, red where it would float
             if (AF.hover && AF.sel !== 'erase' && !AF.grid.has(AF.hover.c + ',' + AF.hover.r)) {
                 T.ghost.visible = true;
+                const okAttach = afAdjacentToPart(AF.hover.c, AF.hover.r);
+                T.ghost.material.color.setHex(okAttach ? 0x667eea : 0xef4444);
                 T.ghost.position.set((AF.hover.c + 0.5) * AF_U - gw / 2, gh / 2 - (AF.hover.r + 0.5) * AF_U, 0);
             } else T.ghost.visible = false;
             const st = afComputeStats();
             T.comM.visible = !!st.com; T.colM.visible = !!st.col;
             if (st.com) T.comM.position.set((st.com.c + 0.5) * AF_U - gw / 2, gh / 2 - (st.com.r + 0.5) * AF_U, 1.6);
             if (st.col) T.colM.position.set((st.col.c + 0.5) * AF_U - gw / 2, gh / 2 + 1.5, 0);
-            // camera: gentle auto-orbit until the user drags
+            // camera: gentle auto-orbit only on an empty board (holds still while you build, so clicks land true)
             const o = T.orb;
-            if (!o.drag) o.theta += dt * 0.045;
+            if (!o.drag && AF.grid.size === 0) o.theta += dt * 0.045;
             T.cam.position.set(o.r * Math.sin(o.phi) * Math.sin(o.theta), o.r * Math.cos(o.phi), o.r * Math.sin(o.phi) * Math.cos(o.theta));
             T.cam.lookAt(0, 0, 0);
         }
@@ -15511,6 +15530,96 @@ function drawPeriodicTrends(ctx, canvas) {
             return text;
         }
 
+        // ===== Sci — a little 3D face for the AI Tutor that blinks, bobs, and lip-syncs when reading aloud =====
+        const SciFace = {
+            three: null, raf: 0, last: 0, t: 0, blinkT: 0, speaking: false, mouthTarget: 0.06, mouth: 0.06, boundaryPulse: 0,
+            start() {
+                const cv = document.getElementById('aiFaceCanvas');
+                if (!cv || !window.THREE || this.three) { if (this.three) return; if (!cv || !window.THREE) return; }
+                let renderer;
+                try { renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true }); }
+                catch (e) { return; }
+                renderer.setClearColor(0x000000, 0);
+                renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+                renderer.setSize(132, 108, false);
+                const scene = new THREE.Scene();
+                const cam = new THREE.PerspectiveCamera(38, 132 / 108, 0.1, 50); cam.position.set(0, 0.05, 5.2);
+                scene.add(new THREE.HemisphereLight(0xffffff, 0x8090c0, 1.0));
+                const key = new THREE.DirectionalLight(0xffffff, 0.7); key.position.set(-2, 3, 4); scene.add(key);
+                const head = new THREE.Group(); scene.add(head);
+                const M = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.5, metalness: 0.15 }, o || {}));
+                const B = (c) => new THREE.MeshBasicMaterial({ color: c });
+                // rounded robot head
+                const face = new THREE.Mesh(new THREE.SphereGeometry(1.15, 32, 26), M(0x7c8cf0)); face.scale.set(1.02, 0.98, 0.9); head.add(face);
+                const panel = new THREE.Mesh(new THREE.SphereGeometry(1.02, 28, 22), M(0xeef2ff, { roughness: 0.35 })); panel.scale.set(0.92, 0.86, 0.55); panel.position.set(0, -0.02, 0.52); head.add(panel);
+                // eyes (each a group so it can blink)
+                this.eyes = [];
+                for (const x of [-0.36, 0.36]) {
+                    const eg = new THREE.Group(); eg.position.set(x, 0.16, 0.95); head.add(eg); this.eyes.push(eg);
+                    const w = new THREE.Mesh(new THREE.SphereGeometry(0.2, 18, 14), B(0xffffff)); w.scale.set(1, 1.15, 0.5); eg.add(w);
+                    const pu = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 12), B(0x1b2340)); pu.scale.set(1, 1.15, 0.5); pu.position.z = 0.12; eg.add(pu);
+                    const hi = new THREE.Mesh(new THREE.SphereGeometry(0.04, 8, 6), B(0xffffff)); hi.position.set(0.05, 0.06, 0.2); eg.add(hi);
+                }
+                // cheeks
+                for (const x of [-0.62, 0.62]) { const ch = new THREE.Mesh(new THREE.CircleGeometry(0.13, 16), new THREE.MeshBasicMaterial({ color: 0xff9ab0, transparent: true, opacity: 0.5 })); ch.position.set(x, -0.28, 0.86); head.add(ch); }
+                // mouth — a dark oval cavity that grows taller (opens) while talking
+                const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.26, 18, 14), B(0x3a2030));
+                mouth.scale.set(1, 0.16, 0.4); mouth.position.set(0, -0.5, 0.9); head.add(mouth); this.mouthMesh = mouth;
+                const tongue = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), B(0xd9607a)); tongue.scale.set(1, 0.5, 0.4); tongue.position.set(0, -0.56, 0.95); head.add(tongue); this.tongue = tongue;
+                // antenna
+                const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.4, 8), M(0x9aa6e8)); stalk.position.set(0, 1.28, 0); head.add(stalk);
+                const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.12, 14, 12), new THREE.MeshStandardMaterial({ color: 0x5fe0ff, emissive: 0x2aa8d8, emissiveIntensity: 0.6 })); bulb.position.set(0, 1.5, 0); head.add(bulb); this.bulb = bulb;
+                this.three = { renderer, scene, cam, head };
+                this.last = 0;
+                cancelAnimationFrame(this.raf);
+                this.raf = requestAnimationFrame(this._loop.bind(this));
+            },
+            _loop(ts) {
+                const cv = document.getElementById('aiFaceCanvas');
+                const panelOpen = (() => { const p = document.getElementById('aiPanel'); return p && p.classList.contains('show'); })();
+                if (!cv || !this.three || !panelOpen) { this.stop(); return; }
+                const dt = Math.min(0.05, this.last ? (ts - this.last) / 1000 : 0.016); this.last = ts;
+                this.t += dt;
+                const T = this.three, head = T.head;
+                // idle bob + gaze
+                head.rotation.y = Math.sin(this.t * 0.8) * 0.12;
+                head.rotation.x = Math.sin(this.t * 1.1) * 0.05;
+                head.position.y = Math.sin(this.t * 1.4) * 0.03;
+                // blink
+                this.blinkT += dt;
+                const bc = this.blinkT % 3.2;
+                const bs = bc < 0.13 ? 1 - Math.sin((bc / 0.13) * Math.PI) * 0.92 : 1;
+                if (this.eyes) this.eyes.forEach(e => e.scale.y = bs);
+                // mouth: talk while speaking, else a gentle closed smile
+                if (this.speaking) {
+                    this.boundaryPulse = Math.max(0, this.boundaryPulse - dt * 4);
+                    this.mouthTarget = 0.25 + Math.abs(Math.sin(this.t * 16)) * (0.35 + 0.35 * Math.random()) + this.boundaryPulse;
+                } else this.mouthTarget = 0.06;
+                this.mouth += (this.mouthTarget - this.mouth) * Math.min(1, dt * 22);
+                const openAmt = Math.max(0, this.mouth);
+                if (this.mouthMesh) this.mouthMesh.scale.set(1, 0.14 + openAmt * 1.05, 0.4);
+                if (this.tongue) { this.tongue.visible = openAmt > 0.25; this.tongue.position.y = -0.5 - openAmt * 0.16; }
+                if (this.bulb) this.bulb.material.emissiveIntensity = this.speaking ? 0.5 + Math.abs(Math.sin(this.t * 10)) * 0.6 : 0.4 + Math.sin(this.t * 2) * 0.15;
+                T.renderer.render(T.scene, T.cam);
+                this.raf = requestAnimationFrame(this._loop.bind(this));
+            },
+            setSpeaking(on) {
+                this.speaking = !!on;
+                const b = document.getElementById('aiFaceBadge'); if (b) b.classList.toggle('on', this.speaking);
+            },
+            pulse() { this.boundaryPulse = 0.35; },   // bump the mouth open on each spoken word
+            stop() {
+                cancelAnimationFrame(this.raf); this.raf = 0;
+                if (this.three) {
+                    this.three.scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); });
+                    this.three.renderer.dispose();
+                    if (this.three.renderer.forceContextLoss) try { this.three.renderer.forceContextLoss(); } catch (e) { }
+                    this.three = null;
+                }
+                this.speaking = false;
+            }
+        };
+
         function aiPanelEl() {
             let p = document.getElementById('aiPanel');
             if (!p) {
@@ -15525,11 +15634,13 @@ function drawPeriodicTrends(ctx, canvas) {
                                 '<button onclick="aiClear()" title="Clear conversation">🗑️</button>' +
                                 '<button onclick="closeAiPanel()" aria-label="Close">✕</button>' +
                             '</span></div>' +
+                        '<div class="ai-face-wrap"><canvas id="aiFaceCanvas"></canvas><span class="ai-face-badge" id="aiFaceBadge">🔊 reading…</span></div>' +
                         '<div class="ai-ctx" id="aiCtx"></div>' +
                         '<div class="ai-msgs" id="aiMsgs"></div>' +
                         '<div class="ai-setup" id="aiSetup" style="display:none"></div>' +
                         '<div class="ai-inrow" id="aiInRow">' +
                             '<textarea class="ai-in" id="aiInput" rows="1" placeholder="Ask a science question…"></textarea>' +
+                            '<button class="ai-imgbtn" id="aiImgBtn" onclick="aiImage()" title="Create an image from your prompt (no key needed)">🎨</button>' +
                             '<button class="ai-send" id="aiSendBtn" onclick="aiSend()">Send</button>' +
                         '</div></div>';
                 document.body.appendChild(p);
@@ -15544,8 +15655,14 @@ function drawPeriodicTrends(ctx, canvas) {
             p.classList.add('show');
             document.getElementById('aiCtx').textContent = aiContextLine();
             aiShowChat();   // keyless — the tutor answers with no setup
+            setTimeout(() => { try { SciFace.start(); } catch (e) { } }, 40);
         }
-        function closeAiPanel() { const p = document.getElementById('aiPanel'); if (p) p.classList.remove('show'); }
+        function closeAiPanel() {
+            const p = document.getElementById('aiPanel'); if (p) p.classList.remove('show');
+            if (window.speechSynthesis) { try { speechSynthesis.cancel(); } catch (e) { } }
+            aiSpeakIdx = -1;
+            try { SciFace.stop(); } catch (e) { }
+        }
         function aiShowChat() {
             document.getElementById('aiSetup').style.display = 'none';
             document.getElementById('aiMsgs').style.display = 'flex';
@@ -15601,6 +15718,12 @@ function drawPeriodicTrends(ctx, canvas) {
                 h += '<div class="ai-bub model">Hi! I\'m <b>Sci</b> 👋 — ask me anything about ' + (currentSimulation ? aiEsc(currentSimulation.name) : 'science') + ', or try one of these:</div>' + aiStarterChips();
             }
             aiMessages.forEach((m, i) => {
+                if (m.img) {   // image message (keyless generation)
+                    if (m.img === 'loading') h += '<div class="ai-bub model">🎨 Painting “' + aiEsc(m.prompt) + '”…<span class="dots"></span></div>';
+                    else h += '<div class="ai-bub model ai-imgbub"><img class="ai-img" src="' + aiEsc(m.img) + '" alt="' + aiEsc(m.prompt) + '" loading="lazy">' +
+                        '<div class="ai-imgcap">🎨 ' + aiEsc(m.prompt) + ' · <a href="' + aiEsc(m.img) + '" target="_blank" rel="noopener">open full size</a></div></div>';
+                    return;
+                }
                 const streamingThis = aiStreaming && i === lastModel && !m.err;
                 h += '<div class="ai-bub ' + (m.role === 'user' ? 'user' : (m.err ? 'err' : 'model')) + '">' +
                     (m.role === 'user' ? aiEsc(m.text) : (aiFmt(m.text) || '')) +
@@ -15613,7 +15736,8 @@ function drawPeriodicTrends(ctx, canvas) {
                         '</div>';
                 }
             });
-            if (aiBusy && !aiStreaming) h += '<div class="ai-busy">🤖 Sci is thinking<span class="dots"></span></div>';
+            const lastIsImgLoad = aiMessages.length && aiMessages[aiMessages.length - 1].img === 'loading';
+            if (aiBusy && !aiStreaming && !lastIsImgLoad) h += '<div class="ai-busy">🤖 Sci is thinking<span class="dots"></span></div>';
             box.innerHTML = h;
             box.scrollTop = box.scrollHeight;
             const btn = document.getElementById('aiSendBtn');
@@ -15625,12 +15749,16 @@ function drawPeriodicTrends(ctx, canvas) {
         function aiCopy(i, btn) { const t = (aiMessages[i] && aiMessages[i].text) || ''; try { navigator.clipboard.writeText(t); } catch (e) { } if (btn) { btn.textContent = '✓'; setTimeout(() => { btn.textContent = '📋'; }, 1100); } }
         function aiSpeak(i) {
             const synth = window.speechSynthesis; if (!synth) return;
-            if (aiSpeakIdx === i) { synth.cancel(); aiSpeakIdx = -1; aiRender(); return; }
+            try { SciFace.start(); } catch (e) { }   // ensure the face is live to lip-sync
+            if (aiSpeakIdx === i) { synth.cancel(); aiSpeakIdx = -1; try { SciFace.setSpeaking(false); } catch (e) { } aiRender(); return; }
             synth.cancel();
             const plain = ((aiMessages[i] && aiMessages[i].text) || '').replace(/```[\s\S]*?```/g, '').replace(/[*#`>_~]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
             const u = new SpeechSynthesisUtterance(plain); u.rate = 1.03; u.pitch = 1.02;
-            u.onend = u.onerror = () => { if (aiSpeakIdx === i) { aiSpeakIdx = -1; aiRender(); } };
+            u.onstart = () => { try { SciFace.setSpeaking(true); } catch (e) { } };
+            u.onboundary = () => { try { SciFace.pulse(); } catch (e) { } };   // open the mouth on each word
+            u.onend = u.onerror = () => { try { SciFace.setSpeaking(false); } catch (e) { } if (aiSpeakIdx === i) { aiSpeakIdx = -1; aiRender(); } };
             aiSpeakIdx = i; synth.speak(u); aiRender();
+            try { SciFace.setSpeaking(true); } catch (e) { }   // start mouth immediately (onstart can lag)
         }
         function aiRegen() {
             if (aiBusy) return;
@@ -15643,9 +15771,33 @@ function drawPeriodicTrends(ctx, canvas) {
             const inp = document.getElementById('aiInput');
             const q = (inp.value || '').trim();
             if (!q) return;
+            // Natural image intents ("draw a cell", "picture of a volcano") route to keyless image generation.
+            if (/^\s*(draw|sketch|paint|generate\s+(an?\s+)?image|create\s+(an?\s+)?image|make\s+(an?\s+)?(image|picture)|image\s+of|a?\s*picture\s+of|show\s+me\s+(an?\s+)?(image|picture))/i.test(q)) {
+                const prompt = q.replace(/^\s*(draw|sketch|paint|generate|create|make|show\s+me)\s+(an?\s+)?(image|picture|drawing)?\s*(of\s+)?/i, '').trim() || q;
+                inp.value = '';
+                return aiImage(prompt);
+            }
             inp.value = '';
             aiMessages.push({ role: 'user', text: q });
             aiGenerate();
+        }
+        // Keyless image generation — builds a Pollinations image URL (no API key, no password) and shows it.
+        async function aiImage(promptArg) {
+            if (aiBusy) return;
+            const inp = document.getElementById('aiInput');
+            const q = (promptArg != null ? promptArg : (inp.value || '')).trim();
+            if (!q) { if (inp) inp.focus(); return; }
+            if (promptArg == null && inp) inp.value = '';
+            aiMessages.push({ role: 'user', text: '🎨 ' + q });
+            const mi = aiMessages.push({ role: 'model', img: 'loading', prompt: q }) - 1;
+            aiBusy = true; aiRender();
+            const seed = Math.floor(Math.random() * 1e6);
+            const url = 'https://image.pollinations.ai/prompt/' + encodeURIComponent(q) +
+                '?width=640&height=640&nologo=true&model=flux&seed=' + seed;
+            const img = new Image();
+            img.onload = () => { if (aiMessages[mi]) aiMessages[mi].img = url; aiBusy = false; aiRender(); };
+            img.onerror = () => { aiMessages[mi] = { role: 'model', err: true, text: '⚠️ Couldn’t create that image just now — please try again.' }; aiBusy = false; aiRender(); };
+            img.src = url;
         }
         // Streams the answer token-by-token into a growing model bubble (keyless & inline, abortable).
         async function aiGenerate() {
