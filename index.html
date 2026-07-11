@@ -2235,6 +2235,16 @@
     /* scoreboard */
     .qz-board{ max-width:680px; margin:auto; width:100%; }
     .qz-board h3{ text-align:center; font-size:1.6em; margin:0 0 18px; }
+    .qz-accuracy{ background:rgba(255,255,255,.1); border-radius:16px; padding:14px 16px; margin:18px auto; max-width:520px; }
+    .qz-accuracy-h{ font-weight:800; text-align:center; margin-bottom:12px; font-size:1.05em; }
+    .qz-accuracy-row{ display:flex; align-items:center; gap:10px; margin:9px 0; }
+    .qz-accuracy-who{ flex:0 0 150px; display:flex; align-items:center; gap:6px; font-weight:700; font-size:.9em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .qz-accuracy-bar{ flex:1; height:12px; border-radius:7px; background:rgba(0,0,0,.22); overflow:hidden; }
+    .qz-accuracy-bar i{ display:block; height:100%; border-radius:7px; transition:width .8s cubic-bezier(.2,.8,.2,1); }
+    .qz-accuracy-val{ flex:0 0 96px; text-align:right; font-size:.88em; font-variant-numeric:tabular-nums; }
+    .qz-accuracy-solo{ text-align:center; margin:16px auto 4px; }
+    .qz-accuracy-solo .big{ font-size:3.2em; font-weight:800; line-height:1; }
+    .qz-accuracy-solo .sub{ opacity:.85; margin-top:4px; font-size:.95em; }
     .qz-rank{ display:flex; align-items:center; gap:14px; background:rgba(255,255,255,.1); border-radius:14px;
       padding:12px 16px; margin-bottom:10px; animation:slideInRight .4s ease both; }
     .qz-rank .pos{ font-weight:900; font-size:1.3em; width:36px; text-align:center; }
@@ -29170,6 +29180,35 @@ window.SCENES_3D['binary-search'] = {
     afterBoard: function () { var g = this.game; if (g.idx + 1 >= g.qs.length) this.endGame(); else this.nextQuestion(); },
     _ranked: function () { return this.game.players.slice().sort(function (a, b) { return b.score - a.score; }); },
 
+    // ---- accuracy readout (shown on every end screen) -------------------
+    _accColor: function (pct) { return pct >= 80 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444'; },
+    _accGrade: function (pct) {
+      if (pct === 100) return 'Perfect! 🏅'; if (pct >= 80) return 'Great job! 🌟';
+      if (pct >= 60) return 'Nicely done 👍'; if (pct >= 40) return 'Keep practising 💪';
+      return 'Give it another go 🔁';
+    },
+    _accuracyHTML: function () {
+      var g = this.game, self = this, qc = g.qs.length || 1;
+      var humans = g.players.filter(function (p) { return !p.isBot; });
+      // Solo (or a single human): show one big headline figure.
+      if (humans.length === 1 && g.players.length === 1) {
+        var p = humans[0], c = p.correct || 0, pct = Math.round(100 * c / qc), col = this._accColor(pct);
+        return '<div class="qz-accuracy"><div class="qz-accuracy-h">🎯 Your accuracy</div>' +
+          '<div class="qz-accuracy-solo"><div class="big" style="color:' + col + '">' + pct + '%</div>' +
+          '<div class="sub"><b>' + c + '</b> of <b>' + qc + '</b> correct · ' + self._accGrade(pct) + '</div></div>' +
+          '<div class="qz-accuracy-bar" style="max-width:340px;margin:12px auto 2px"><i style="width:' + pct + '%;background:' + col + '"></i></div></div>';
+      }
+      // Multiplayer / bots: one accuracy bar per player, best first.
+      var rows = g.players.slice().sort(function (a, b) { return (b.correct || 0) - (a.correct || 0); }).map(function (p) {
+        var c = p.correct || 0, pct = Math.round(100 * c / qc), col = self._accColor(pct);
+        return '<div class="qz-accuracy-row">' +
+          '<span class="qz-accuracy-who">' + qzAvatar(p.avatar, p.acc) + esc(p.name) + (p.isBot ? ' 🤖' : '') + '</span>' +
+          '<span class="qz-accuracy-bar"><i style="width:' + pct + '%;background:' + col + '"></i></span>' +
+          '<span class="qz-accuracy-val">' + c + '/' + qc + ' · <b style="color:' + col + '">' + pct + '%</b></span></div>';
+      }).join('');
+      return '<div class="qz-accuracy"><div class="qz-accuracy-h">🎯 Accuracy (correct answers)</div>' + rows + '</div>';
+    },
+
     // ---- END / PODIUM ---------------------------------------------------
     endGame: function () {
       var g = this.game; g.phase = 'end';
@@ -29204,9 +29243,10 @@ window.SCENES_3D['binary-search'] = {
         var streakN = this._dailyFinish(g._daily);
         dailyLine = '<div style="text-align:center;font-size:1.15em;font-weight:800;margin:6px 0 14px">📅 Daily Challenge complete — 🔥 streak: ' + streakN + ' day' + (streakN === 1 ? '' : 's') + '!</div>';
       }
+      var accHTML = this._accuracyHTML();
       stage.querySelector('.qz-stage-body').innerHTML =
         '<div class="qz-board"><h3>🎉 ' + esc(g.quiz.title) + ' — complete!</h3>' + dailyLine +
-        '<div class="qz-podium">' + podHTML + '</div>' +
+        '<div class="qz-podium">' + podHTML + '</div>' + accHTML +
         '<div style="text-align:center"><button class="qz-btn lg gold" data-act="playAgain">🔁 Play again</button> ' +
         '<button class="qz-btn outline" data-act="quitGame">📚 Back to library</button></div></div>';
       this._confetti();
