@@ -842,11 +842,26 @@
         .ai-msgs { flex: 1; overflow-y: auto; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
         .ai-bub { max-width: 86%; padding: 10px 14px; border-radius: 14px; font-size: 0.93em; line-height: 1.55; white-space: pre-wrap; word-wrap: break-word; }
         .ai-bub.user { align-self: flex-end; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; border-bottom-right-radius: 4px; }
-        .ai-bub.model { align-self: flex-start; background: var(--bg-light); color: var(--text-dark); border: 1px solid var(--border-light); border-bottom-left-radius: 4px; }
+        .ai-bub.model { align-self: flex-start; background: var(--bg-light); color: var(--text-dark); border: 1px solid var(--border-light); border-bottom-left-radius: 4px; white-space: normal; }
         .ai-bub.err { align-self: flex-start; background: rgba(229,62,62,0.1); color: #b02a2a; border: 1px solid rgba(229,62,62,0.35); }
         body.dark-theme .ai-bub.err { color: #ff9d9d; }
         .ai-bub code { background: rgba(0,0,0,0.1); padding: 1px 5px; border-radius: 5px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.9em; }
         body.dark-theme .ai-bub code { background: rgba(255,255,255,0.14); }
+        /* rich markdown inside model answers */
+        .ai-bub.model > div { margin: 0; }
+        .ai-bub.model .ai-h { font-weight: 800; margin: 8px 0 3px; font-size: 1.02em; }
+        .ai-bub.model .ai-sp { height: 7px; }
+        .ai-bub.model ul, .ai-bub.model ol { margin: 4px 0 4px 2px; padding-left: 20px; }
+        .ai-bub.model li { margin: 2px 0; }
+        .ai-bub.model .ai-code { background: rgba(0,0,0,0.09); border-radius: 8px; padding: 9px 11px; margin: 6px 0; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.86em; white-space: pre-wrap; overflow-x: auto; }
+        body.dark-theme .ai-bub.model .ai-code { background: rgba(255,255,255,0.09); }
+        .ai-bub.model a { color: var(--primary); font-weight: 700; }
+        .ai-caret { display: inline-block; width: 7px; height: 1.05em; background: var(--primary); border-radius: 2px; margin-left: 2px; vertical-align: text-bottom; animation: aiCaret 0.9s steps(2) infinite; }
+        @keyframes aiCaret { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        .ai-acts { align-self: flex-start; display: flex; gap: 4px; margin: -4px 0 4px 2px; }
+        .ai-act { background: transparent; border: none; cursor: pointer; font-size: 0.92em; padding: 3px 6px; border-radius: 7px; opacity: 0.65; }
+        .ai-act:hover { opacity: 1; background: var(--bg-light); }
+        .ai-send.stopping { background: linear-gradient(135deg, #ef4444, #b91c1c); }
         .ai-busy { align-self: flex-start; color: var(--text-light); font-size: 0.88em; padding: 4px 2px; }
         .ai-busy .dots::after { content: '…'; animation: aiDots 1.2s steps(4) infinite; }
         @keyframes aiDots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
@@ -14866,6 +14881,9 @@ function drawPeriodicTrends(ctx, canvas) {
         const AI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-1.5-flash'];
         let aiMessages = [];      // { role: 'user' | 'model', text, err? }
         let aiBusy = false;
+        let aiStreaming = false;  // true while tokens are streaming into the last bubble
+        let aiAbort = null;       // AbortController for the in-flight request (Stop button)
+        let aiSpeakIdx = -1;      // index of the message currently being read aloud, or -1
 
         function aiKey() { try { return (localStorage.getItem('geminiApiKey') || '').trim(); } catch (e) { return ''; } }
         function setAiKeyStored(k) { try { k ? localStorage.setItem('geminiApiKey', k) : localStorage.removeItem('geminiApiKey'); } catch (e) { } }
@@ -14893,9 +14911,10 @@ function drawPeriodicTrends(ctx, canvas) {
                 ctx = 'The student is on the app home screen browsing topics across Physics, Biology, Chemistry and Computer Science.';
             }
             return 'You are Sci, the friendly AI tutor built into the "Science Playground" learning app — an interactive collection of 3D science simulations for students. ' +
-                'Explain ideas clearly and simply with short paragraphs and concrete everyday examples; define any jargon you use. ' +
+                'Explain ideas clearly and simply with concrete everyday examples; define any jargon you use. ' +
+                'Format for easy reading: short paragraphs, and use **bold** for key terms, bullet lists for parts/steps, and numbered lists for ordered processes. Use simple Markdown only (no tables or images). ' +
                 'When helpful, point at what the student can DO in the open simulation (drag to rotate, move the sliders, press Play). ' +
-                'Stay on science and learning topics. Keep answers under about 200 words unless the student asks for more detail. ' + ctx;
+                'Stay on science and learning topics. Keep answers under about 180 words unless the student asks for more detail. ' + ctx;
         }
 
         async function callGemini() {
@@ -14970,6 +14989,7 @@ function drawPeriodicTrends(ctx, canvas) {
                     '<div class="ai-box" role="dialog" aria-modal="true" aria-label="AI Tutor">' +
                         '<div class="ai-head"><span>🤖 AI Tutor<small>ask anything — no setup</small></span>' +
                             '<span class="ai-head-btns">' +
+                                '<button onclick="aiClear()" title="Clear conversation">🗑️</button>' +
                                 '<button onclick="closeAiPanel()" aria-label="Close">✕</button>' +
                             '</span></div>' +
                         '<div class="ai-ctx" id="aiCtx"></div>' +
@@ -15002,33 +15022,89 @@ function drawPeriodicTrends(ctx, canvas) {
         }
         // (The AI Tutor is keyless — it never asks for an API key. The old key-setup screen was removed.)
         function aiEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+        // Lightweight, safe Markdown → HTML: headings, bullet/numbered lists, code blocks, bold/italic/code/links.
         function aiFmt(s) {
-            return aiEsc(s)
-                .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
-                .replace(/`([^`\n]+)`/g, '<code>$1</code>');
+            const blocks = [];
+            s = String(s || '').replace(/```[\w-]*\n?([\s\S]*?)```/g, (m, c) => { blocks.push(c.replace(/\n$/, '')); return ' CB' + (blocks.length - 1) + ' '; });
+            const inline = t => aiEsc(t)
+                .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+                .replace(/(^|[^*])\*([^*\s][^*]*?)\*(?!\*)/g, '$1<i>$2</i>')
+                .replace(/`([^`]+)`/g, '<code>$1</code>')
+                .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+            let html = '', list = null;
+            const closeList = () => { if (list) { html += '</' + list + '>'; list = null; } };
+            String(s).split('\n').forEach(raw => {
+                const line = raw.replace(/\s+$/, ''); let m;
+                if ((m = line.trim().match(/^ CB(\d+) $/))) { closeList(); html += '<pre class="ai-code">' + aiEsc(blocks[+m[1]]) + '</pre>'; return; }
+                if ((m = line.match(/^\s*(#{1,4})\s+(.*)/))) { closeList(); html += '<div class="ai-h">' + inline(m[2]) + '</div>'; return; }
+                if ((m = line.match(/^\s*[-*•]\s+(.*)/))) { if (list !== 'ul') { closeList(); html += '<ul>'; list = 'ul'; } html += '<li>' + inline(m[1]) + '</li>'; return; }
+                if ((m = line.match(/^\s*\d+[.)]\s+(.*)/))) { if (list !== 'ol') { closeList(); html += '<ol>'; list = 'ol'; } html += '<li>' + inline(m[1]) + '</li>'; return; }
+                if (line.trim() === '') { closeList(); html += '<div class="ai-sp"></div>'; return; }
+                closeList(); html += '<div>' + inline(line) + '</div>';
+            });
+            closeList();
+            return html;
+        }
+        function aiStarterChips() {
+            const inSim = !!currentSimulation;
+            const chips = inSim
+                ? [['Explain it simply', 'Explain this topic simply, like I\'m 12'],
+                   ['Real-life example', 'Give me a real-life example of this'],
+                   ['How is it used?', 'Where is this used in the real world?'],
+                   ['Common mistakes', 'What do students usually get wrong about this?'],
+                   ['Quiz me', 'Quiz me with 3 questions about this topic, one at a time']]
+                : [['Explain a concept', 'Explain a cool science concept simply'],
+                   ['Physics', 'Teach me something surprising about physics'],
+                   ['Biology', 'Teach me something surprising about biology'],
+                   ['Quiz me', 'Quiz me with 3 fun science questions, one at a time']];
+            return '<div class="ai-chips">' + chips.map(c => '<button class="ai-chip" onclick="aiAsk(' + JSON.stringify(c[1]).replace(/"/g, '&quot;') + ')">' + c[0] + '</button>').join('') + '</div>';
         }
         function aiRender() {
             const box = document.getElementById('aiMsgs');
             if (!box) return;
+            const lastModel = (() => { for (let i = aiMessages.length - 1; i >= 0; i--) if (aiMessages[i].role === 'model') return i; return -1; })();
             let h = '';
             if (!aiMessages.length) {
-                h += '<div class="ai-bub model">Hi! I\'m <b>Sci</b> 👋 — ask me anything about ' + (currentSimulation ? aiEsc(currentSimulation.name) : 'science') + ', or try one of these:</div>' +
-                    '<div class="ai-chips">' +
-                        '<button class="ai-chip" onclick="aiAsk(\'Explain this topic simply\')">Explain it simply</button>' +
-                        '<button class="ai-chip" onclick="aiAsk(\'Give me a real-life example of this\')">Real-life example</button>' +
-                        '<button class="ai-chip" onclick="aiAsk(\'Quiz me with 3 questions about this topic\')">Quiz me</button>' +
-                    '</div>';
+                h += '<div class="ai-bub model">Hi! I\'m <b>Sci</b> 👋 — ask me anything about ' + (currentSimulation ? aiEsc(currentSimulation.name) : 'science') + ', or try one of these:</div>' + aiStarterChips();
             }
-            aiMessages.forEach(m => {
-                h += '<div class="ai-bub ' + (m.role === 'user' ? 'user' : (m.err ? 'err' : 'model')) + '">' + aiFmt(m.text) + '</div>';
+            aiMessages.forEach((m, i) => {
+                const streamingThis = aiStreaming && i === lastModel && !m.err;
+                h += '<div class="ai-bub ' + (m.role === 'user' ? 'user' : (m.err ? 'err' : 'model')) + '">' +
+                    (m.role === 'user' ? aiEsc(m.text) : (aiFmt(m.text) || '')) +
+                    (streamingThis ? '<span class="ai-caret"></span>' : '') + '</div>';
+                if (m.role === 'model' && !m.err && m.text && !streamingThis) {
+                    h += '<div class="ai-acts">' +
+                        '<button class="ai-act" onclick="aiCopy(' + i + ',this)" title="Copy">📋</button>' +
+                        '<button class="ai-act" onclick="aiSpeak(' + i + ')" title="Read aloud">' + (aiSpeakIdx === i ? '⏹️' : '🔊') + '</button>' +
+                        (i === lastModel ? '<button class="ai-act" onclick="aiRegen()" title="Regenerate">🔄</button>' : '') +
+                        '</div>';
+                }
             });
-            if (aiBusy) h += '<div class="ai-busy">🤖 Sci is thinking<span class="dots"></span></div>';
+            if (aiBusy && !aiStreaming) h += '<div class="ai-busy">🤖 Sci is thinking<span class="dots"></span></div>';
             box.innerHTML = h;
             box.scrollTop = box.scrollHeight;
             const btn = document.getElementById('aiSendBtn');
-            if (btn) btn.disabled = aiBusy;
+            if (btn) { btn.disabled = false; btn.textContent = aiBusy ? '⏹ Stop' : 'Send'; btn.onclick = aiBusy ? aiStop : aiSend; btn.classList.toggle('stopping', aiBusy); }
         }
         function aiAsk(q) { const i = document.getElementById('aiInput'); if (i) i.value = q; aiSend(); }
+        function aiClear() { if (aiBusy) aiStop(); aiMessages = []; if (window.speechSynthesis) speechSynthesis.cancel(); aiSpeakIdx = -1; aiRender(); const i = document.getElementById('aiInput'); if (i) i.focus(); }
+        function aiStop() { if (aiAbort) try { aiAbort.abort(); } catch (e) { } }
+        function aiCopy(i, btn) { const t = (aiMessages[i] && aiMessages[i].text) || ''; try { navigator.clipboard.writeText(t); } catch (e) { } if (btn) { btn.textContent = '✓'; setTimeout(() => { btn.textContent = '📋'; }, 1100); } }
+        function aiSpeak(i) {
+            const synth = window.speechSynthesis; if (!synth) return;
+            if (aiSpeakIdx === i) { synth.cancel(); aiSpeakIdx = -1; aiRender(); return; }
+            synth.cancel();
+            const plain = ((aiMessages[i] && aiMessages[i].text) || '').replace(/```[\s\S]*?```/g, '').replace(/[*#`>_~]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+            const u = new SpeechSynthesisUtterance(plain); u.rate = 1.03; u.pitch = 1.02;
+            u.onend = u.onerror = () => { if (aiSpeakIdx === i) { aiSpeakIdx = -1; aiRender(); } };
+            aiSpeakIdx = i; synth.speak(u); aiRender();
+        }
+        function aiRegen() {
+            if (aiBusy) return;
+            while (aiMessages.length && aiMessages[aiMessages.length - 1].role === 'model') aiMessages.pop();
+            if (!aiMessages.some(m => m.role === 'user')) return;
+            aiGenerate();
+        }
         async function aiSend() {
             if (aiBusy) return;
             const inp = document.getElementById('aiInput');
@@ -15036,24 +15112,59 @@ function drawPeriodicTrends(ctx, canvas) {
             if (!q) return;
             inp.value = '';
             aiMessages.push({ role: 'user', text: q });
-            // Keyless & inline: answers come from a free AI service (no API key, no new tab).
-            // If the user happens to have saved a Google key earlier, we quietly use that instead.
-            aiBusy = true; aiRender();
+            aiGenerate();
+        }
+        // Streams the answer token-by-token into a growing model bubble (keyless & inline, abortable).
+        async function aiGenerate() {
+            if (aiBusy) return;
+            aiBusy = true; aiStreaming = false; aiAbort = new AbortController();
+            const mi = aiMessages.push({ role: 'model', text: '' }) - 1;
+            aiRender();
             try {
-                let answer;
                 if (aiKey()) {
-                    try { answer = await callGemini(); }
-                    catch (ge) { if (ge && ge.badKey) { setAiKeyStored(''); answer = await callFreeAI(); } else throw ge; }
+                    try { aiMessages[mi].text = await callGemini(); }
+                    catch (ge) { if (ge && ge.badKey) { setAiKeyStored(''); await aiStreamFree(mi); } else throw ge; }
                 } else {
-                    answer = await callFreeAI();
+                    await aiStreamFree(mi);
                 }
-                aiMessages.push({ role: 'model', text: answer });
+                if (!String(aiMessages[mi].text).trim()) aiMessages[mi].text = 'I couldn’t generate an answer just then — please try again.';
             } catch (e) {
-                aiMessages.push({ role: 'model', err: true, text: '⚠️ ' + ((e && e.msg) || 'Something went wrong — please try again.') });
+                if (e && e.name === 'AbortError') { if (!String(aiMessages[mi].text).trim()) aiMessages[mi] = { role: 'model', text: '⏹ Stopped.' }; }
+                else { aiMessages[mi] = { role: 'model', err: true, text: '⚠️ ' + ((e && e.msg) || 'Something went wrong — please try again.') }; }
             }
-            aiBusy = false;
+            aiBusy = false; aiStreaming = false; aiAbort = null;
             aiRender();
             const i2 = document.getElementById('aiInput'); if (i2) i2.focus();
+        }
+        async function aiStreamFree(mi) {
+            const hist = aiMessages.slice(0, mi).filter(m => !m.err && m.text).slice(-10)
+                .map(m => ({ role: m.role === 'model' ? 'assistant' : 'user', content: m.text }));
+            const messages = [{ role: 'system', content: aiSystemPrompt() }].concat(hist);
+            let res;
+            try {
+                res = await fetch('https://text.pollinations.ai/openai', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: aiAbort.signal,
+                    body: JSON.stringify({ model: 'openai', stream: true, messages: messages, private: true, referrer: 'science-playground' })
+                });
+            } catch (e) { if (e && e.name === 'AbortError') throw e; throw { msg: 'Could not reach the AI tutor — check your internet connection and try again.' }; }
+            if (!res.ok || !res.body || !res.body.getReader) {
+                if (!res.ok && res.status === 429) throw { msg: 'The free AI tutor is busy right now — wait a few seconds and ask again.' };
+                aiMessages[mi].text = await callFreeAI(); return;   // fall back to the non-streaming call
+            }
+            aiStreaming = true;
+            const reader = res.body.getReader(), dec = new TextDecoder(); let buf = '';
+            while (true) {
+                const { done, value } = await reader.read(); if (done) break;
+                buf += dec.decode(value, { stream: true });
+                let nl; while ((nl = buf.indexOf('\n')) >= 0) {
+                    const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+                    if (!line.startsWith('data:')) continue;
+                    const p = line.slice(5).trim(); if (!p || p === '[DONE]') continue;
+                    try { const d = JSON.parse(p); const c = d.choices && d.choices[0] && d.choices[0].delta && d.choices[0].delta.content; if (c) { aiMessages[mi].text += c; } } catch (e) { }
+                }
+                aiRender();
+            }
+            if (!String(aiMessages[mi].text).trim()) aiMessages[mi].text = await callFreeAI();   // stream yielded nothing
         }
 
         function shareDialogEl() {
