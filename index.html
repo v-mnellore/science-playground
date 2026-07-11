@@ -8859,7 +8859,7 @@ function drawCaesarCipher(ctx, c){
         const LOBBY_GAMES = [
             { id: 'ships', icon: '🚢', title: 'Battleship', desc: '10×10 naval strategy — sink the enemy fleet before they sink yours.',
               stat: () => { const s = shipsStats(); return (s.wins || s.losses) ? ('🏆 ' + (s.wins || 0) + ' win' + ((s.wins || 0) === 1 ? '' : 's') + ' · ' + (s.losses || 0) + ' loss' + ((s.losses || 0) === 1 ? '' : 'es')) : 'Not played yet'; } },
-            { id: 'aeroforge', icon: '✈️', title: 'Build-a-Plane', desc: 'Design a plane from parts, balance the wings, then test-fly it — earn coins, unlock jets, pop balloons with turrets.',
+            { id: 'aeroforge', icon: '✈️', title: 'Build-a-Plane 3D', desc: 'Design a plane from 3D parts on an orbitable workspace, balance the wings, then test-fly it through a 3D sky — earn coins, unlock jets, pop balloons with turrets.',
               stat: () => { const s = afStore(); return (s.best || s.coins) ? ('🪙 ' + (s.coins || 0) + ' coins · 📏 best ' + (s.best || 0) + ' m') : 'Not flown yet'; } }
         ];
         function selectLobby() {
@@ -8949,6 +8949,7 @@ function drawCaesarCipher(ctx, c){
 
         function renderAeroforge(container) {
             if (AF && AF.raf) cancelAnimationFrame(AF.raf);   // re-entry: kill the previous loop
+            afDispose3D();                                     // and free the previous GL context
             const store = afStore();
             AF = { mode: 'build', sel: 'cockpit', grid: new Map(), hover: null, F: null, last: 0, raf: 0 };
             (store.design || []).forEach(d => AF.grid.set(d[0] + ',' + d[1], d[2]));
@@ -9091,7 +9092,7 @@ function drawCaesarCipher(ctx, c){
                     const bal = Math.abs(off) < 0.35 ? '⚖️ <b>Balanced</b> — stable flight.'
                         : off < 0 ? '⚠️ <b>Nose-heavy</b> (weight ahead of wings) — it will pitch down and dive!'
                         : '⚠️ <b>Tail-heavy</b> (weight behind wings) — it will pitch up and flip backward!';
-                    afMsg(bal + ' &nbsp; Space = engines · ⬆/⬇ or W/S = pitch. Blue dot = weight (CoM), violet dot = lift (CoL).');
+                    afMsg(bal + ' &nbsp; 🖱️ Drag to orbit · scroll to zoom · Space = engines · ⬆/⬇ = pitch. Blue ball = weight (CoM), violet cone = lift (CoL).');
                 }
             }
         }
@@ -9109,6 +9110,7 @@ function drawCaesarCipher(ctx, c){
             return { cell, ox: (W - cell * AF_COLS) / 2, oy: (H - cell * AF_ROWS) / 2 - 10, W, H };
         }
         function afCellAt(e) {
+            if (AF && AF.three) return afCell3D(e);   // 3D: raycast the blueprint board
             const cv = document.getElementById('afCanvas');
             const rc = cv.getBoundingClientRect(), g = afGridGeom(cv);
             const x = e.clientX - rc.left - g.ox, y = e.clientY - rc.top - g.oy;
@@ -9118,6 +9120,7 @@ function drawCaesarCipher(ctx, c){
         function afCanvasHover(e) { if (AF && AF.mode === 'build') AF.hover = afCellAt(e); }
         function afCanvasClick(e, erase) {
             if (!AF || AF.mode !== 'build') return;
+            if (AF._dragged) { AF._dragged = false; return; }   // that "click" was an orbit drag
             const cell = afCellAt(e); if (!cell) return;
             const key = cell.c + ',' + cell.r;
             if (erase || AF.sel === 'erase') {
@@ -9359,19 +9362,361 @@ function drawCaesarCipher(ctx, c){
         }
 
         // ---- rendering ----
+        // 3D-first (Three.js r128 is vendored); the original 2D canvas renderer remains as fallback.
         function afLoop(ts) {
             const cv = document.getElementById('afCanvas');
-            if (!cv || !AF || cv.offsetParent === null) return;   // unmounted or hidden — stop the loop
+            if (!cv || !AF || cv.offsetParent === null) { afDispose3D(); return; }   // unmounted or hidden — stop the loop
             const dt = Math.min(0.033, AF.last ? (ts - AF.last) / 1000 : 0.016);
             AF.last = ts;
-            const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = 480;
-            const pw = Math.round(W * dpr);
-            if (cv.width !== pw) { cv.width = pw; cv.height = Math.round(H * dpr); }
-            const ctx = cv.getContext('2d');
-            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-            if (AF.mode === 'fly' || (AF.F && AF.F.over)) { afPhysics(AF.F && AF.F.over ? 0 : dt); afDrawFly(ctx, W, H, dt); }
-            else afDrawBuild(ctx, W, H);
+            if (!AF.three && !AF.no3d) afInit3D(cv);
+            if (AF.mode === 'fly' || (AF.F && AF.F.over)) afPhysics(AF.F && AF.F.over ? 0 : dt);
+            if (AF.three) {
+                af3DRender(dt);
+            } else {
+                const dpr = window.devicePixelRatio || 1, W = cv.clientWidth, H = 480;
+                const pw = Math.round(W * dpr);
+                if (cv.width !== pw) { cv.width = pw; cv.height = Math.round(H * dpr); }
+                const ctx = cv.getContext('2d');
+                ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+                if (AF.mode === 'fly' || (AF.F && AF.F.over)) afDrawFly(ctx, W, H, dt);
+                else afDrawBuild(ctx, W, H);
+            }
             AF.raf = requestAnimationFrame(afLoop);
+        }
+
+        // ===== AeroForge 3D layer =====
+        const AF_U = 2.3;      // world units per grid cell (build board)
+        const AF_PX = 10;      // game px per world unit (flight)
+        function afInit3D(cv) {
+            if (!window.THREE) { AF.no3d = true; return; }
+            let renderer;
+            try {
+                renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+            } catch (e) { AF.no3d = true; return; }
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+            const scene = new THREE.Scene();
+            const cam = new THREE.PerspectiveCamera(50, cv.clientWidth / 480, 0.1, 500);
+            scene.add(new THREE.AmbientLight(0xffffff, 0.68));
+            const sun = new THREE.DirectionalLight(0xffffff, 0.85);
+            sun.position.set(6, 12, 8);
+            scene.add(sun);
+            const T = AF.three = {
+                renderer, scene, cam,
+                buildRoot: new THREE.Group(), flyRoot: new THREE.Group(),
+                cellMeshes: new Map(), balloonMeshes: new Map(), postMeshes: new Map(),
+                bulletPool: [], particlePool: [],
+                planeGroup: null, planeParts: [],
+                orb: { theta: -0.5, phi: 1.12, r: 30, drag: null }
+            };
+            scene.add(T.buildRoot); scene.add(T.flyRoot);
+            // --- build board: translucent blueprint plate + grid lines ---
+            const gw = AF_COLS * AF_U, gh = AF_ROWS * AF_U;
+            T.board = new THREE.Mesh(new THREE.PlaneGeometry(gw, gh),
+                new THREE.MeshBasicMaterial({ color: 0x4a6cf7, transparent: true, opacity: 0.07, side: THREE.DoubleSide }));
+            T.board.position.z = -0.25;
+            T.buildRoot.add(T.board);
+            const gpts = [];
+            for (let c = 0; c <= AF_COLS; c++) gpts.push(new THREE.Vector3(c * AF_U - gw / 2, -gh / 2, -0.2), new THREE.Vector3(c * AF_U - gw / 2, gh / 2, -0.2));
+            for (let r = 0; r <= AF_ROWS; r++) gpts.push(new THREE.Vector3(-gw / 2, r * AF_U - gh / 2, -0.2), new THREE.Vector3(gw / 2, r * AF_U - gh / 2, -0.2));
+            const gg = new THREE.BufferGeometry().setFromPoints(gpts);
+            T.buildRoot.add(new THREE.LineSegments(gg, new THREE.LineBasicMaterial({ color: 0x6c86f7, transparent: true, opacity: 0.4 })));
+            T.ghost = new THREE.Mesh(new THREE.BoxGeometry(AF_U * 0.94, AF_U * 0.94, AF_U * 0.94),
+                new THREE.MeshBasicMaterial({ color: 0x667eea, transparent: true, opacity: 0.22 }));
+            T.ghost.visible = false;
+            T.buildRoot.add(T.ghost);
+            T.comM = new THREE.Mesh(new THREE.SphereGeometry(0.42, 18, 14), new THREE.MeshStandardMaterial({ color: 0x2563eb, emissive: 0x1e40af, emissiveIntensity: 0.5 }));
+            T.colM = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.9, 14), new THREE.MeshStandardMaterial({ color: 0x8b5cf6, emissive: 0x6d28d9, emissiveIntensity: 0.5 }));
+            T.colM.rotation.x = Math.PI;
+            T.buildRoot.add(T.comM); T.buildRoot.add(T.colM);
+            // --- flight world: terrain ribbon + runway + clouds ---
+            T.terrSegs = 96;
+            const tg = new THREE.PlaneGeometry(1, 1, T.terrSegs, 1);
+            T.terr = new THREE.Mesh(tg, new THREE.MeshLambertMaterial({ color: 0x7cbf6b, side: THREE.DoubleSide }));
+            T.flyRoot.add(T.terr);
+            T.runway = new THREE.Mesh(new THREE.BoxGeometry(47, 0.35, 7), new THREE.MeshLambertMaterial({ color: 0x8b95a5 }));
+            T.flyRoot.add(T.runway);
+            T.clouds = [];
+            const cmat = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
+            for (let i = 0; i < 7; i++) {
+                const cl = new THREE.Mesh(new THREE.SphereGeometry(1.6, 10, 8), cmat);
+                cl.scale.set(2.4 + (i % 3), 0.9, 1.4);
+                T.clouds.push(cl); T.flyRoot.add(cl);
+            }
+            // pools
+            const bulGeo = new THREE.SphereGeometry(0.32, 8, 6);
+            for (let i = 0; i < 24; i++) {
+                const b = new THREE.Mesh(bulGeo, new THREE.MeshBasicMaterial({ color: 0xfbbf24 }));
+                b.visible = false; T.bulletPool.push(b); T.flyRoot.add(b);
+            }
+            const pGeo = new THREE.SphereGeometry(0.34, 8, 6);
+            for (let i = 0; i < 90; i++) {
+                const p = new THREE.Mesh(pGeo, new THREE.MeshBasicMaterial({ transparent: true }));
+                p.visible = false; T.particlePool.push(p); T.flyRoot.add(p);
+            }
+            // orbit + zoom controls (build mode)
+            cv.addEventListener('pointerdown', e => {
+                if (!AF || !AF.three || AF.mode !== 'build') return;
+                AF.three.orb.drag = { x: e.clientX, y: e.clientY, moved: false };
+            });
+            cv.addEventListener('pointermove', e => {
+                const T2 = AF && AF.three; if (!T2 || !T2.orb.drag) return;
+                const dx = e.clientX - T2.orb.drag.x, dy = e.clientY - T2.orb.drag.y;
+                if (!T2.orb.drag.moved && Math.hypot(dx, dy) < 7) return;
+                T2.orb.drag.moved = true; AF._dragged = true;
+                T2.orb.theta -= dx * 0.008; T2.orb.phi = Math.max(0.35, Math.min(1.5, T2.orb.phi - dy * 0.006));
+                T2.orb.drag.x = e.clientX; T2.orb.drag.y = e.clientY;
+            });
+            window.addEventListener('pointerup', () => { if (AF && AF.three) AF.three.orb.drag = null; });
+            cv.addEventListener('wheel', e => {
+                if (!AF || !AF.three || AF.mode !== 'build') return;
+                e.preventDefault();
+                AF.three.orb.r = Math.max(16, Math.min(55, AF.three.orb.r * (e.deltaY > 0 ? 1.09 : 0.92)));
+            }, { passive: false });
+        }
+        function afDispose3D() {
+            if (!AF || !AF.three) return;
+            const T = AF.three;
+            T.scene.traverse(o => {
+                if (o.geometry) o.geometry.dispose();
+                if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
+            });
+            T.renderer.dispose();
+            if (T.renderer.forceContextLoss) try { T.renderer.forceContextLoss(); } catch (e) { }
+            AF.three = null;
+        }
+        function afCell3D(e) {
+            const T = AF.three, cv = T.renderer.domElement;
+            const rc = cv.getBoundingClientRect();
+            const nx = ((e.clientX - rc.left) / rc.width) * 2 - 1;
+            const ny = -((e.clientY - rc.top) / rc.height) * 2 + 1;
+            if (!T.ray) T.ray = new THREE.Raycaster();
+            T.ray.setFromCamera({ x: nx, y: ny }, T.cam);
+            const hit = T.ray.intersectObject(T.board)[0];
+            if (!hit) return null;
+            const gw = AF_COLS * AF_U, gh = AF_ROWS * AF_U;
+            const c = Math.floor((hit.point.x + gw / 2) / AF_U);
+            const r = Math.floor((gh / 2 - hit.point.y) / AF_U);
+            return (c >= 0 && c < AF_COLS && r >= 0 && r < AF_ROWS) ? { c, r } : null;
+        }
+        // Build one part as a small 3D assembly. +x is the nose; wings span the z axis.
+        function afPartMesh3D(t) {
+            const g = new THREE.Group(), u = AF_U;
+            const std = (c, extra) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.55, metalness: 0.15 }, extra || {}));
+            const box = (w, h, d, m) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+            switch (t) {
+                case 'cockpit': {
+                    const b = box(u * 0.95, u * 0.6, u * 0.72, std(0xf59e0b)); g.add(b);
+                    const canopy = new THREE.Mesh(new THREE.SphereGeometry(u * 0.3, 12, 10), std(0xbae6fd, { transparent: true, opacity: 0.9 }));
+                    canopy.scale.set(1.25, 0.75, 0.8); canopy.position.set(u * 0.1, u * 0.38, 0); g.add(canopy);
+                    break;
+                }
+                case 'hull': {
+                    g.add(box(u * 0.98, u * 0.55, u * 0.7, std(0x94a3b8)));
+                    break;
+                }
+                case 'engine': {
+                    const nac = new THREE.Mesh(new THREE.CylinderGeometry(u * 0.26, u * 0.3, u * 0.85, 12), std(0xef4444));
+                    nac.rotation.z = Math.PI / 2; g.add(nac);
+                    const hub = new THREE.Mesh(new THREE.CylinderGeometry(u * 0.07, u * 0.07, u * 0.16, 8), std(0x7f1d1d));
+                    hub.rotation.z = Math.PI / 2; hub.position.x = u * 0.5; g.add(hub);
+                    const prop = new THREE.Group();
+                    const blade = box(u * 0.05, u * 1.05, u * 0.1, std(0x4b5563));
+                    const blade2 = blade.clone(); blade2.rotation.x = Math.PI / 2;
+                    prop.add(blade); prop.add(blade2);
+                    prop.position.x = u * 0.58; g.add(prop);
+                    g.userData.spin = prop;
+                    break;
+                }
+                case 'wing': {
+                    const w = box(u * 0.9, u * 0.16, u * 3.1, std(0x38bdf8));
+                    g.add(w);
+                    const tipL = box(u * 0.5, u * 0.13, u * 0.3, std(0x0ea5e9)); tipL.position.set(-u * 0.15, 0, u * 1.6); g.add(tipL);
+                    const tipR = tipL.clone(); tipR.position.z = -u * 1.6; g.add(tipR);
+                    break;
+                }
+                case 'tank': {
+                    const tk = new THREE.Mesh(new THREE.CylinderGeometry(u * 0.32, u * 0.32, u * 0.75, 14), std(0x22c55e));
+                    g.add(tk);
+                    const cap = new THREE.Mesh(new THREE.CylinderGeometry(u * 0.12, u * 0.12, u * 0.16, 8), std(0x166534));
+                    cap.position.y = u * 0.45; g.add(cap);
+                    break;
+                }
+                case 'jet': {
+                    const body = new THREE.Mesh(new THREE.CylinderGeometry(u * 0.3, u * 0.38, u * 0.95, 12), std(0xa855f7));
+                    body.rotation.z = Math.PI / 2; g.add(body);
+                    const noz = new THREE.Mesh(new THREE.CylinderGeometry(u * 0.34, u * 0.24, u * 0.25, 12), std(0x581c87));
+                    noz.rotation.z = Math.PI / 2; noz.position.x = -u * 0.55; g.add(noz);
+                    const flame = new THREE.Mesh(new THREE.ConeGeometry(u * 0.22, u * 0.9, 10),
+                        new THREE.MeshBasicMaterial({ color: 0xfb923c, transparent: true, opacity: 0.85 }));
+                    flame.rotation.z = Math.PI / 2; flame.position.x = -u * 1.05;
+                    g.add(flame);
+                    g.userData.flame = flame;
+                    break;
+                }
+                case 'turret': {
+                    const base = new THREE.Mesh(new THREE.CylinderGeometry(u * 0.32, u * 0.4, u * 0.35, 12), std(0x374151));
+                    g.add(base);
+                    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(u * 0.07, u * 0.07, u * 0.85, 8), std(0xeab308));
+                    barrel.rotation.z = -0.85; barrel.position.set(u * 0.28, u * 0.38, 0); g.add(barrel);
+                    break;
+                }
+                case 'armor': {
+                    const a = box(u * 0.98, u * 0.5, u * 0.8, std(0x64748b, { metalness: 0.5, roughness: 0.35 }));
+                    g.add(a);
+                    for (let i = -1; i <= 1; i++) {
+                        const stud = new THREE.Mesh(new THREE.SphereGeometry(u * 0.07, 6, 5), std(0x334155));
+                        stud.position.set(i * u * 0.32, u * 0.27, 0); g.add(stud);
+                    }
+                    break;
+                }
+            }
+            return g;
+        }
+        function af3DRender(dt) {
+            const T = AF.three, cv = T.renderer.domElement;
+            const W = cv.clientWidth;
+            if (T._w !== W) { T._w = W; T.renderer.setSize(W, 480, false); T.cam.aspect = W / 480; T.cam.updateProjectionMatrix(); }
+            const dark = document.body.classList.contains('dark-theme');
+            T.scene.background = T.scene.background || new THREE.Color();
+            const inFly = !!(AF.mode === 'fly' || (AF.F && AF.F.over));   // strict boolean: three r128 culls only on visible === false
+            T.scene.background.set(inFly ? (dark ? 0x0e1530 : 0x8ecdf3) : (dark ? 0x141c33 : 0xeaf4fd));
+            T.buildRoot.visible = !inFly;
+            T.flyRoot.visible = inFly;
+            if (inFly) af3DFly(dt); else af3DBuild(dt);
+            T.renderer.render(T.scene, T.cam);
+        }
+        function af3DBuild(dt) {
+            const T = AF.three, gw = AF_COLS * AF_U, gh = AF_ROWS * AF_U;
+            // sync part meshes with the grid
+            const seen = new Set();
+            AF.grid.forEach((t, key) => {
+                seen.add(key);
+                let m = T.cellMeshes.get(key);
+                if (!m || m.userData.t !== t) {
+                    if (m) { T.buildRoot.remove(m); }
+                    m = afPartMesh3D(t); m.userData.t = t;
+                    T.cellMeshes.set(key, m); T.buildRoot.add(m);
+                }
+                const [c, r] = key.split(',').map(Number);
+                m.position.set((c + 0.5) * AF_U - gw / 2, gh / 2 - (r + 0.5) * AF_U, 0);
+            });
+            [...T.cellMeshes.keys()].forEach(k => { if (!seen.has(k)) { T.buildRoot.remove(T.cellMeshes.get(k)); T.cellMeshes.delete(k); } });
+            // spin props slowly on the bench
+            T.cellMeshes.forEach(m => { if (m.userData.spin) m.userData.spin.rotation.x += dt * 2; if (m.userData.flame) m.userData.flame.visible = false; });
+            // ghost + markers
+            if (AF.hover && AF.sel !== 'erase' && !AF.grid.has(AF.hover.c + ',' + AF.hover.r)) {
+                T.ghost.visible = true;
+                T.ghost.position.set((AF.hover.c + 0.5) * AF_U - gw / 2, gh / 2 - (AF.hover.r + 0.5) * AF_U, 0);
+            } else T.ghost.visible = false;
+            const st = afComputeStats();
+            T.comM.visible = !!st.com; T.colM.visible = !!st.col;
+            if (st.com) T.comM.position.set((st.com.c + 0.5) * AF_U - gw / 2, gh / 2 - (st.com.r + 0.5) * AF_U, 1.6);
+            if (st.col) T.colM.position.set((st.col.c + 0.5) * AF_U - gw / 2, gh / 2 + 1.5, 0);
+            // camera: gentle auto-orbit until the user drags
+            const o = T.orb;
+            if (!o.drag) o.theta += dt * 0.045;
+            T.cam.position.set(o.r * Math.sin(o.phi) * Math.sin(o.theta), o.r * Math.cos(o.phi), o.r * Math.sin(o.phi) * Math.cos(o.theta));
+            T.cam.lookAt(0, 0, 0);
+        }
+        function af3DFly(dt) {
+            const T = AF.three, F = AF.F; if (!F) return;
+            const wx = F.x / AF_PX, wy = (480 - F.y) / AF_PX;
+            // (re)build the plane group at flight start
+            if (!T.planeGroup || T.planeGroup.userData.F !== F) {
+                if (T.planeGroup) T.flyRoot.remove(T.planeGroup);
+                T.planeGroup = new THREE.Group();
+                T.planeGroup.userData.F = F;
+                T.planeParts = [];
+                F.parts.forEach(p => {
+                    const m = afPartMesh3D(p.t);
+                    m.position.set(p.lx / AF_PX, -p.ly / AF_PX, 0);
+                    T.planeGroup.add(m); T.planeParts.push(m);
+                });
+                T.flyRoot.add(T.planeGroup);
+                T.balloonMeshes.forEach(m => T.flyRoot.remove(m)); T.balloonMeshes.clear();
+                T.postMeshes.forEach(m => T.flyRoot.remove(m)); T.postMeshes.clear();
+            }
+            T.planeGroup.visible = !F.crashed;
+            T.planeGroup.position.set(wx, wy, 0);
+            T.planeGroup.rotation.z = F.a;
+            const thrustOn = F.enginesOn && F.fuel > 0 && !F.over;
+            T.planeParts.forEach(m => {
+                if (m.userData.spin) m.userData.spin.rotation.x += dt * (thrustOn ? 40 : 4);
+                if (m.userData.flame) { m.userData.flame.visible = thrustOn; if (thrustOn) m.userData.flame.scale.set(1, 0.8 + Math.random() * 0.5, 1); }
+            });
+            // terrain ribbon follows the camera
+            const camWx = wx;
+            const span = 110, x0 = camWx - 30;
+            const pos = T.terr.geometry.attributes.position;
+            for (let i = 0; i <= T.terrSegs; i++) {
+                const gx = x0 + (i / T.terrSegs) * span;
+                const gy = (480 - afTerrY(gx * AF_PX)) / AF_PX;
+                pos.setXYZ(i, gx, gy, -17);                        // back edge
+                pos.setXYZ(i + T.terrSegs + 1, gx, gy, 9);         // front edge
+            }
+            pos.needsUpdate = true;
+            T.terr.geometry.computeVertexNormals();
+            T.terr.material.color.set(document.body.classList.contains('dark-theme') ? 0x2a4a30 : 0x7cbf6b);
+            T.runway.position.set(23.5, (480 - afTerrY(60)) / AF_PX - 0.1, 0);
+            // clouds parallax
+            T.clouds.forEach((cl, i) => {
+                const spanC = 130;
+                let cx = camWx * 0.55 + i * 19;
+                cx = camWx - 40 + (((cx % spanC) + spanC) % spanC);
+                cl.position.set(cx, 30 + (i * 7) % 14, -12 - (i % 3) * 5);
+            });
+            // distance posts every 100 m
+            for (let mx = Math.max(1000, Math.ceil((camWx * AF_PX - 300) / 1000) * 1000); mx < camWx * AF_PX + 800; mx += 1000) {
+                if (!T.postMeshes.has(mx)) {
+                    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 3, 6), new THREE.MeshLambertMaterial({ color: 0xf5f5f5 }));
+                    T.postMeshes.set(mx, post); T.flyRoot.add(post);
+                }
+                const post = T.postMeshes.get(mx);
+                post.position.set(mx / AF_PX, (480 - afTerrY(mx)) / AF_PX + 1.5, 2.5);
+            }
+            [...T.postMeshes.keys()].forEach(k => { if (k < camWx * AF_PX - 500) { T.flyRoot.remove(T.postMeshes.get(k)); T.postMeshes.delete(k); } });
+            // balloons
+            const bseen = new Set();
+            F.balloons.forEach(b => {
+                bseen.add(b);
+                let m = T.balloonMeshes.get(b);
+                if (!m) {
+                    m = new THREE.Group();
+                    const s = new THREE.Mesh(new THREE.SphereGeometry(1.5, 14, 12),
+                        new THREE.MeshStandardMaterial({ color: b.c, roughness: 0.35 }));
+                    s.scale.set(0.85, 1, 0.85); m.add(s);
+                    const knot = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 2.2, 5),
+                        new THREE.MeshBasicMaterial({ color: 0x777777 }));
+                    knot.position.y = -2.4; m.add(knot);
+                    T.balloonMeshes.set(b, m); T.flyRoot.add(m);
+                }
+                m.position.set(b.x / AF_PX, (480 - b.y) / AF_PX, 0);
+            });
+            [...T.balloonMeshes.keys()].forEach(b => { if (!bseen.has(b)) { T.flyRoot.remove(T.balloonMeshes.get(b)); T.balloonMeshes.delete(b); } });
+            // bullets from the pool
+            T.bulletPool.forEach((m, i) => {
+                const bl = F.bullets[i];
+                if (bl) { m.visible = true; m.position.set(bl.x / AF_PX, (480 - bl.y) / AF_PX, 0); }
+                else m.visible = false;
+            });
+            // particles from the pool (text popups are HUD-only in 3D)
+            let pi = 0;
+            for (const pt of F.particles) {
+                if (pt.txt || pi >= T.particlePool.length) continue;
+                const m = T.particlePool[pi++];
+                m.visible = true;
+                m.position.set(pt.x / AF_PX, (480 - pt.y) / AF_PX, (pi % 5 - 2) * 0.3);
+                m.material.color.set(pt.c);
+                m.material.opacity = Math.min(1, pt.life * 2.2);
+                const sc = (pt.r || 3) / 3;
+                m.scale.set(sc, sc, sc);
+            }
+            for (; pi < T.particlePool.length; pi++) T.particlePool[pi].visible = false;
+            // decay particle data here (the 2D renderer used to do this)
+            F.particles = F.particles.filter(pt => { pt.life -= dt; pt.x += (pt.vx || 0) * dt; pt.y += (pt.vy || 0) * dt; return pt.life > 0; });
+            // chase camera
+            T.cam.position.set(wx - 7, wy + 4.5, 15.5);
+            T.cam.lookAt(wx + 5, wy - 0.5, 0);
         }
         function afDrawBuild(ctx, W, H) {
             const dark = document.body.classList.contains('dark-theme');
