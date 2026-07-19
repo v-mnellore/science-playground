@@ -1185,6 +1185,10 @@
         .lobby-card.locked .lobby-lock { position: absolute; bottom: 6px; right: 10px; font-size: 0.5em; }
         .lobby-card.locked .lobby-card-stat { color: #94a3b8; }
         .lobby-card-play:disabled { background: #cbd5e1; color: #64748b; cursor: not-allowed; }
+        .cg-obj-btn { border: 2px solid var(--border-light); background: var(--bg-white); color: var(--text-dark); border-radius: 9px; padding: 5px 11px; font-weight: 800; font-size: 0.82em; cursor: pointer; font-family: inherit; }
+        .cg-obj-btn + .cg-obj-btn { margin-left: 4px; }
+        .cg-obj-btn:hover { border-color: var(--primary); }
+        .cg-obj-btn.on { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; border-color: transparent; }
 
         /* ===== AEROFORGE: Build-a-Plane (Lobby game) ===== */
         .af-wrap { max-width: 1080px; margin: 0 auto; }
@@ -3314,6 +3318,11 @@ if __name__ == "__main__":
             const controlsMap = {
                 'center-of-gravity': `
                     <div class="control-item">
+                        <label class="control-label">Object:</label>
+                        <button type="button" class="cg-obj-btn${(window.cgShape || 'box') === 'box' ? ' on' : ''}" data-shape="box" onclick="cgSetShape('box')">📦 Box</button>
+                        <button type="button" class="cg-obj-btn${window.cgShape === 'table' ? ' on' : ''}" data-shape="table" onclick="cgSetShape('table')">🪑 Table</button>
+                    </div>
+                    <div class="control-item">
                         <label class="control-label">Incline:</label>
                         <input type="range" class="control-slider" id="cgAngleSlider" min="0" max="42" step="1" value="16" oninput="updateValue('cgAngleValue', this.value + '°'); drawSimulation()" style="width: 120px;">
                         <span class="control-value-display" id="cgAngleValue">16°</span>
@@ -4948,7 +4957,25 @@ function drawCaesarCipher(ctx, c){
             ctx.textAlign = 'left';
         }
 
-        // Center of Gravity & stability: a box on an incline. The object tips over when the plumb line
+        // Object shape for the Center of Gravity sim: 'box' (solid) or 'table' (four legs — mass sits high on a narrow base)
+        window.cgShape = window.cgShape || 'box';
+        function cgSetShape(s) {
+            window.cgShape = s;
+            document.querySelectorAll('.cg-obj-btn').forEach(b => b.classList.toggle('on', b.getAttribute('data-shape') === s));
+            if (window.SFX) SFX.play('click');
+            if (typeof drawSimulation === 'function') drawSimulation();   // 3D reads window.cgShape live each frame
+        }
+        // Shared physics: combined centre of gravity (local frame, base centre = origin) for each object type.
+        function cgStats(shape, bw, bh, loadX) {
+            if (shape === 'table') {
+                const Mlegs = 1, Mtop = 1.4, Ml = 2, legH = bh, sum = Mlegs + Mtop + Ml;
+                return { cgx: (Ml * loadX) / sum, cgy: (Mlegs * (legH * 0.5) + Mtop * legH + Ml * (legH + 0.28)) / sum };
+            }
+            const Mb = 3, Ml = 2;                          // box: uniform body + a load near the top
+            return { cgx: (Ml * loadX) / (Mb + Ml), cgy: (Mb * (bh / 2) + Ml * (bh * 0.86)) / (Mb + Ml) };
+        }
+
+        // Center of Gravity & stability: a box or table on an incline. The object tips over when the plumb line
         // from its center of gravity falls outside its base of support. Sliders change height, load, base, incline.
         function drawCenterOfGravity(ctx, canvas) {
             const W = canvas.width, H = canvas.height;
@@ -4968,10 +4995,10 @@ function drawCaesarCipher(ctx, c){
             const half = bw / 2;
 
             // combined centre of gravity in object-local (along-incline x from base centre, up y)
-            const Mb = 3, Ml = 2;
-            const loadX = loadPos * half * 0.82, loadUp = bh * 0.9;
-            const cgx = (Ml * loadX) / (Mb + Ml);
-            const cgy = (Mb * (bh / 2) + Ml * loadUp) / (Mb + Ml);
+            const shape = window.cgShape || 'box';
+            const loadX = loadPos * half * 0.82;
+            const cs = cgStats(shape, bw, bh, loadX);
+            const cgx = cs.cgx, cgy = cs.cgy;
 
             // stability: where the plumb line from the CoG meets the base (measured along the incline)
             const xIntercept = cgx + cgy * Math.tan(theta);
@@ -4999,16 +5026,27 @@ function drawCaesarCipher(ctx, c){
             ctx.fillStyle = gg; ctx.fill();
             ctx.strokeStyle = '#5f7148'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(g0.x, g0.y); ctx.lineTo(g1.x, g1.y); ctx.stroke();
 
-            // object body
-            const c00 = TL(-half, 0), c10 = TL(half, 0), c11 = TL(half, bh), c01 = TL(-half, bh);
-            ctx.beginPath(); ctx.moveTo(c00.x, c00.y); ctx.lineTo(c10.x, c10.y); ctx.lineTo(c11.x, c11.y); ctx.lineTo(c01.x, c01.y); ctx.closePath();
-            const boxg = ctx.createLinearGradient(c01.x, c01.y, c10.x, c10.y); boxg.addColorStop(0, '#e7c98a'); boxg.addColorStop(1, '#cfa860');
-            ctx.fillStyle = boxg; ctx.fill(); ctx.strokeStyle = '#8a6d34'; ctx.lineWidth = 2.5; ctx.stroke();
-            // load block near the top
-            const lw = half * 0.7, lb0 = TL(loadX - lw, bh * 0.62), lb1 = TL(loadX + lw, bh * 0.62), lb2 = TL(loadX + lw, bh), lb3 = TL(loadX - lw, bh);
-            ctx.beginPath(); ctx.moveTo(lb0.x, lb0.y); ctx.lineTo(lb1.x, lb1.y); ctx.lineTo(lb2.x, lb2.y); ctx.lineTo(lb3.x, lb3.y); ctx.closePath();
-            ctx.fillStyle = '#4a6cf7'; ctx.fill(); ctx.strokeStyle = '#2b45a8'; ctx.lineWidth = 2; ctx.stroke();
-            const lc = TL(loadX, bh * 0.8); ctx.fillStyle = '#fff'; ctx.font = '700 13px Segoe UI, Arial'; ctx.textAlign = 'center'; ctx.fillText('load', lc.x, lc.y + 4);
+            // quad helper (fill + stroke a 4-corner polygon given local points)
+            const quad = (pts, fill, stroke) => {
+                ctx.beginPath(); pts.forEach((p, i) => { const s = TL(p[0], p[1]); i ? ctx.lineTo(s.x, s.y) : ctx.moveTo(s.x, s.y); }); ctx.closePath();
+                ctx.fillStyle = fill; ctx.fill(); if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 2.2; ctx.stroke(); }
+            };
+            let loadTop = bh;   // where the load rests
+            if (shape === 'table') {
+                // four-legged table: two visible legs + a top; the load sits on the tabletop
+                const legT = Math.max(7, half * 0.16), topT = Math.max(9, bh * 0.1);
+                quad([[-half, 0], [-half + legT, 0], [-half + legT, bh], [-half, bh]], '#b9832f', '#7a5416');
+                quad([[half - legT, 0], [half, 0], [half, bh], [half - legT, bh]], '#a9772f', '#7a5416');
+                quad([[-half, bh], [half, bh], [half, bh + topT], [-half, bh + topT]], '#e7c98a', '#8a6d34');
+                loadTop = bh + topT;
+            } else {
+                // solid box
+                quad([[-half, 0], [half, 0], [half, bh], [-half, bh]], '#e7c98a', '#8a6d34');
+            }
+            // load block
+            const lw = half * 0.62, lh = Math.max(16, bh * 0.22);
+            quad([[loadX - lw, loadTop], [loadX + lw, loadTop], [loadX + lw, loadTop + lh], [loadX - lw, loadTop + lh]], '#4a6cf7', '#2b45a8');
+            const lc = TL(loadX, loadTop + lh * 0.5); ctx.fillStyle = '#fff'; ctx.font = '700 13px Segoe UI, Arial'; ctx.textAlign = 'center'; ctx.fillText('load', lc.x, lc.y + 4);
 
             // base of support (thick segment) — green if the plumb stays on it, red if not
             const e0 = TL(-half, 0), e1 = TL(half, 0);
@@ -21258,6 +21296,13 @@ window.SCENES_3D['center-of-gravity'] = {
       new THREE.MeshStandardMaterial({ color: 0xd8b877, roughness: 0.55, metalness: 0.05, transparent: true, opacity: 0.5, depthWrite: false })); st.inner.add(st.body);
     st.edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
       new THREE.LineBasicMaterial({ color: 0x6e561f })); st.inner.add(st.edge);
+    // four-legged table (alternative object) — 4 legs + a top
+    st.table = new THREE.Group(); st.inner.add(st.table);
+    const legMat = new THREE.MeshStandardMaterial({ color: 0xa9772f, roughness: 0.6 });
+    st.legs = [];
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), legMat); leg.userData.sx = sx; leg.userData.sz = sz; st.table.add(leg); st.legs.push(leg); }
+    st.top = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial({ color: 0xd8b877, roughness: 0.55, transparent: true, opacity: 0.62, depthWrite: false })); st.table.add(st.top);
     st.load = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1),
       new THREE.MeshStandardMaterial({ color: 0x4a6cf7, roughness: 0.5 })); st.inner.add(st.load);
     st.cog = new THREE.Mesh(new THREE.SphereGeometry(0.22, 22, 18),
@@ -21276,16 +21321,27 @@ window.SCENES_3D['center-of-gravity'] = {
     const angDeg = slider('cgAngleSlider', 16), heightF = slider('cgHeightSlider', 1),
       loadPos = slider('cgLoadSlider', 0), baseF = slider('cgBaseSlider', 1);
     const theta = angDeg * Math.PI / 180;
+    const shape = window.cgShape || 'box';
     const bw = 2.0 * baseF, bh = 2.6 * heightF, bd = 2.4, half = bw / 2;
-    // size + place the box (base sits at y=0)
+    const isTable = shape === 'table';
+    // toggle which object is shown
+    st.body.visible = st.edge.visible = !isTable;
+    st.table.visible = isTable;
+    // box
     st.body.scale.set(bw, bh, bd); st.body.position.y = bh / 2;
     st.edge.scale.set(bw, bh, bd); st.edge.position.y = bh / 2;
+    // table: four legs at the corners + a top of width bw at height bh
+    const legT = Math.min(0.22, bw * 0.14), topT = 0.2;
+    st.legs.forEach(leg => { leg.scale.set(legT, bh, legT); leg.position.set(leg.userData.sx * (half - legT * 0.6), bh / 2, leg.userData.sz * (bd / 2 - legT * 0.6)); });
+    st.top.scale.set(bw, topT, bd); st.top.position.set(0, bh + topT / 2, 0);
+    // load: near the top of the box, or resting on the tabletop
     const loadX = loadPos * half * 0.82;
-    st.load.scale.set(bw * 0.5, 0.5, bd * 0.72); st.load.position.set(loadX, bh - 0.3, 0);
+    const loadH = 0.5;
+    st.load.scale.set(bw * 0.5, loadH, bd * 0.72);
+    st.load.position.set(loadX, isTable ? (bh + topT + loadH / 2) : (bh - 0.3), 0);
     // combined centre of gravity (local)
-    const Mb = 3, Ml = 2;
-    const cgx = (Ml * loadX) / (Mb + Ml);
-    const cgy = (Mb * (bh / 2) + Ml * (bh * 0.86)) / (Mb + Ml);
+    const cs = cgStats(shape, bw, bh, loadX);
+    const cgx = cs.cgx, cgy = cs.cgy;
     st.cog.position.set(cgx, cgy, 0); st.cogRing.position.set(cgx, cgy, 0);
     // stability: plumb-line intercept along the incline base
     const xInt = cgx + cgy * Math.tan(theta);
