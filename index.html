@@ -1179,6 +1179,12 @@
         .lobby-card-desc { font-size: 0.85em; color: var(--text-light); line-height: 1.4; margin-bottom: 10px; }
         .lobby-card-stat { font-size: 0.8em; font-weight: 700; color: #6366f1; }
         .lobby-card-play { display: block; width: 100%; margin-top: 10px; border: none; border-radius: 10px; padding: 9px; font-weight: 800; cursor: pointer; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; }
+        .lobby-card.locked { cursor: not-allowed; filter: grayscale(0.85) opacity(0.72); }
+        .lobby-card.locked:hover { transform: none; box-shadow: var(--shadow); border-color: transparent; }
+        .lobby-card.locked .lobby-card-top { background: linear-gradient(135deg, #94a3b8, #64748b); position: relative; }
+        .lobby-card.locked .lobby-lock { position: absolute; bottom: 6px; right: 10px; font-size: 0.5em; }
+        .lobby-card.locked .lobby-card-stat { color: #94a3b8; }
+        .lobby-card-play:disabled { background: #cbd5e1; color: #64748b; cursor: not-allowed; }
 
         /* ===== AEROFORGE: Build-a-Plane (Lobby game) ===== */
         .af-wrap { max-width: 1080px; margin: 0 auto; }
@@ -9021,6 +9027,8 @@ function drawCaesarCipher(ctx, c){
         }
 
         // ===== GAME LOBBY (hub for playable games; Battleship today, more later) =====
+        // Master lock for all game links. Set to false to make the games playable again.
+        const GAMES_LOCKED = true;
         const LOBBY_GAMES = [
             { id: 'ships', icon: '🚢', title: 'Battleship', desc: '10×10 naval strategy — sink the enemy fleet before they sink yours.',
               stat: () => { const s = shipsStats(); return (s.wins || s.losses) ? ('🏆 ' + (s.wins || 0) + ' win' + ((s.wins || 0) === 1 ? '' : 's') + ' · ' + (s.losses || 0) + ' loss' + ((s.losses || 0) === 1 ? '' : 'es')) : 'Not played yet'; } },
@@ -9047,6 +9055,14 @@ function drawCaesarCipher(ctx, c){
             if (!lv) return;
             const cards = LOBBY_GAMES.map(g => {
                 const stat = g.stat ? g.stat() : '';
+                if (GAMES_LOCKED) {
+                    return '<div class="lobby-card locked" onclick="lobbyOpenGame(\'' + g.id + '\')">' +
+                        '<div class="lobby-card-top">' + g.icon + '<span class="lobby-lock">🔒</span></div>' +
+                        '<div class="lobby-card-body"><div class="lobby-card-title">' + g.title + '</div>' +
+                        '<div class="lobby-card-desc">' + g.desc + '</div>' +
+                        '<div class="lobby-card-stat">🔒 Temporarily unavailable</div>' +
+                        '<button class="lobby-card-play" disabled>🔒 Locked</button></div></div>';
+                }
                 return '<div class="lobby-card" onclick="lobbyOpenGame(\'' + g.id + '\')">' +
                     '<div class="lobby-card-top">' + g.icon + '</div>' +
                     '<div class="lobby-card-body"><div class="lobby-card-title">' + g.title + '</div>' +
@@ -9062,6 +9078,7 @@ function drawCaesarCipher(ctx, c){
                 '</div>';
         }
         function lobbyOpenGame(id) {
+            if (GAMES_LOCKED) { SFX.play('error'); alert('🔒 The games are temporarily unavailable right now. Please check back later!'); return; }
             SFX.play('click');
             const lv = document.getElementById('lobbyView');
             if (!lv) return;
