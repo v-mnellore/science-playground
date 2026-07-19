@@ -9028,7 +9028,7 @@ function drawCaesarCipher(ctx, c){
 
         // ===== GAME LOBBY (hub for playable games; Battleship today, more later) =====
         // Master lock for all game links. Set to false to make the games playable again.
-        const GAMES_LOCKED = true;
+        const GAMES_LOCKED = false;
         const LOBBY_GAMES = [
             { id: 'ships', icon: '🚢', title: 'Battleship', desc: '10×10 naval strategy — sink the enemy fleet before they sink yours.',
               stat: () => { const s = shipsStats(); return (s.wins || s.losses) ? ('🏆 ' + (s.wins || 0) + ' win' + ((s.wins || 0) === 1 ? '' : 's') + ' · ' + (s.losses || 0) + ' loss' + ((s.losses || 0) === 1 ? '' : 'es')) : 'Not played yet'; } },
