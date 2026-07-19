@@ -4803,7 +4803,7 @@ if __name__ == "__main__":
         // ===== ADDED TOPICS (self-contained 2D canvas simulations) =====
         // Routed straight to the 2D renderer so they show their real diagram, not a generic 3D scene.
         // (was a list of sims without bespoke 3D scenes — all of them have real 3D scenes now)
-        window.TWOD_ONLY = new Set(['center-of-gravity']);
+        window.TWOD_ONLY = new Set([]);   // center-of-gravity now has a real 3D scene (2D draw kept as fallback)
         function nt_bg(ctx, c, a, b){ const g = ctx.createLinearGradient(0,0,0,c.height); g.addColorStop(0,a); g.addColorStop(1,b); ctx.fillStyle = g; ctx.fillRect(0,0,c.width,c.height); }
         function nt_txt(ctx, t, x, y, s, col, al){ ctx.save(); ctx.fillStyle = col || '#1f2937'; ctx.font = '600 ' + (s||14) + "px -apple-system,'Segoe UI',sans-serif"; ctx.textAlign = al || 'left'; ctx.fillText(t, x, y); ctx.restore(); }
 
@@ -21236,6 +21236,86 @@ var qrcode = function() {
         const S = window.SCENES_3D;
 
         /* ===== Bespoke 3D models (auto-added) ===== */
+// Center of Gravity: a 3D box on a tiltable incline. A plumb line drops from the center of gravity;
+// the object tips over (animated) when that line falls outside its base of support.
+window.SCENES_3D['center-of-gravity'] = {
+  build(api) {
+    const { THREE, group } = api;
+    const st = {};
+    const inc = new THREE.Group(); group.add(inc); st.inc = inc;                 // the tilting incline
+    const ground = new THREE.Mesh(new THREE.BoxGeometry(6, 0.5, 4),
+      new THREE.MeshStandardMaterial({ color: 0x8ea377, roughness: 0.95 }));
+    ground.position.y = -0.25; inc.add(ground);
+    const grid = new THREE.GridHelper(4, 5, 0x5f7148, 0x71855a); grid.position.y = 0.011; inc.add(grid);
+    st.baseBar = new THREE.Mesh(new THREE.BoxGeometry(1, 0.12, 2.4),
+      new THREE.MeshStandardMaterial({ color: 0x16a34a, emissive: 0x0a5a2a, emissiveIntensity: 0.5, roughness: 0.5 })); inc.add(st.baseBar);
+    st.pe = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 12),
+      new THREE.MeshStandardMaterial({ color: 0x16a34a, emissive: 0x0a5a2a, emissiveIntensity: 0.6 })); inc.add(st.pe);
+    // object = pivot group (rotates about the downhill edge) → inner group → body/load/CoG
+    st.pivot = new THREE.Group(); inc.add(st.pivot);
+    st.inner = new THREE.Group(); st.pivot.add(st.inner);
+    st.body = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial({ color: 0xd8b877, roughness: 0.55, metalness: 0.05, transparent: true, opacity: 0.5, depthWrite: false })); st.inner.add(st.body);
+    st.edge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)),
+      new THREE.LineBasicMaterial({ color: 0x6e561f })); st.inner.add(st.edge);
+    st.load = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1),
+      new THREE.MeshStandardMaterial({ color: 0x4a6cf7, roughness: 0.5 })); st.inner.add(st.load);
+    st.cog = new THREE.Mesh(new THREE.SphereGeometry(0.22, 22, 18),
+      new THREE.MeshStandardMaterial({ color: 0x141414, roughness: 0.35, emissive: 0x222222, depthTest: false })); st.cog.renderOrder = 998; st.inner.add(st.cog);
+    st.cogRing = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.06, 12, 28),
+      new THREE.MeshStandardMaterial({ color: 0xffd84a, emissive: 0xe0a81a, emissiveIntensity: 0.85, roughness: 0.3, depthTest: false })); st.cogRing.renderOrder = 999; st.inner.add(st.cogRing);
+    // world-vertical plumb line + ground-hit marker (added to group so they stay vertical)
+    st.plumb = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1, 10),
+      new THREE.MeshStandardMaterial({ color: 0x16a34a, emissive: 0x0a5a2a, emissiveIntensity: 0.7, depthTest: false })); st.plumb.renderOrder = 996; group.add(st.plumb);
+    st.hit = new THREE.Mesh(new THREE.SphereGeometry(0.14, 14, 12),
+      new THREE.MeshStandardMaterial({ color: 0x16a34a, emissive: 0x0a5a2a, emissiveIntensity: 0.7, depthTest: false })); st.hit.renderOrder = 997; group.add(st.hit);
+    return st;
+  },
+  update(st, t, api) {
+    const { slider, group } = api;
+    const angDeg = slider('cgAngleSlider', 16), heightF = slider('cgHeightSlider', 1),
+      loadPos = slider('cgLoadSlider', 0), baseF = slider('cgBaseSlider', 1);
+    const theta = angDeg * Math.PI / 180;
+    const bw = 2.0 * baseF, bh = 2.6 * heightF, bd = 2.4, half = bw / 2;
+    // size + place the box (base sits at y=0)
+    st.body.scale.set(bw, bh, bd); st.body.position.y = bh / 2;
+    st.edge.scale.set(bw, bh, bd); st.edge.position.y = bh / 2;
+    const loadX = loadPos * half * 0.82;
+    st.load.scale.set(bw * 0.5, 0.5, bd * 0.72); st.load.position.set(loadX, bh - 0.3, 0);
+    // combined centre of gravity (local)
+    const Mb = 3, Ml = 2;
+    const cgx = (Ml * loadX) / (Mb + Ml);
+    const cgy = (Mb * (bh / 2) + Ml * (bh * 0.86)) / (Mb + Ml);
+    st.cog.position.set(cgx, cgy, 0); st.cogRing.position.set(cgx, cgy, 0);
+    // stability: plumb-line intercept along the incline base
+    const xInt = cgx + cgy * Math.tan(theta);
+    const stable = Math.abs(xInt) <= half;
+    const tipDir = xInt >= 0 ? 1 : -1;
+    const tip = stable ? 0 : Math.min(1.4, 2.0 * t * t);   // accelerating fall when unstable
+    st.inc.rotation.z = -theta;
+    const pivotX = tipDir * half;
+    st.pivot.position.set(pivotX, 0, 0); st.pivot.rotation.z = -tip * tipDir;
+    st.inner.position.set(-pivotX, 0, 0);
+    // base-of-support highlight (green stable / red tipping)
+    st.baseBar.scale.set(bw, 1, 1); st.baseBar.position.set(0, 0.07, 0);
+    const gcol = stable ? 0x16a34a : 0xdc2626, gem = stable ? 0x0a5a2a : 0x7a1414;
+    st.baseBar.material.color.setHex(gcol); st.baseBar.material.emissive.setHex(gem);
+    st.pe.position.set(pivotX, 0.1, bd / 2 + 0.05); st.pe.material.color.setHex(gcol); st.pe.material.emissive.setHex(gem);
+    // CoG position in group-local coords (transform chain, so the plumb can hang world-vertical)
+    const rz = (x, y, a) => [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
+    const r1 = rz(cgx - pivotX, cgy, st.pivot.rotation.z);
+    const r2 = rz(r1[0] + pivotX, r1[1], -theta);
+    const cgLx = r2[0], cgLy = r2[1];
+    const hitY = -Math.tan(theta) * cgLx;                  // where the vertical drop meets the tilted ground
+    st.plumb.position.set(cgLx, (cgLy + hitY) / 2, 0);
+    st.plumb.scale.set(1, Math.max(0.02, cgLy - hitY), 1);
+    const pcol = stable ? 0x16a34a : 0xdc2626, pem = stable ? 0x0a5a2a : 0x7a1414;
+    st.plumb.material.color.setHex(pcol); st.plumb.material.emissive.setHex(pem);
+    st.hit.position.set(cgLx, hitY, 0); st.hit.material.color.setHex(pcol); st.hit.material.emissive.setHex(pem);
+    // slow showcase turntable (about the vertical axis, so the plumb stays vertical)
+    group.rotation.y = Math.sin(t * 0.25) * 0.5;
+  }
+};
 window.SCENES_3D['refraction'] = {
   build(api) {
     const { THREE, group } = api;
