@@ -2770,6 +2770,7 @@ if __name__ == "__main__":
             // PHYSICS
             { id: 'calculator', category: 'Physics', name: 'Scientific Calculator', icon: '🧮', description: 'Scientific calculator with physics constants' },
             { id: 'pendulum', category: 'Physics', name: 'Pendulum Motion', icon: '🎯', description: 'Harmonic oscillation - swinging motion' },
+            { id: 'center-of-gravity', category: 'Physics', name: 'Center of Gravity', icon: '⚖️', description: 'Balance & stability - see the center of gravity and find when an object tips over' },
             { id: 'ships', category: 'Physics', name: 'Battleship (Ships)', icon: '🚢', description: '10×10 naval strategy — sink the enemy fleet before they sink yours' },
             { id: 'turret-ai', category: 'Physics', name: 'Auto-Targeting Turret', icon: '📡', description: 'Naval turret AI — acquires the closest enemy in range and slews to track it (RotateTowards)' },
             { id: 'spring', category: 'Physics', name: 'Spring Oscillation', icon: '🔄', description: 'Hooke\'s Law - bouncing mass' },
@@ -3311,6 +3312,28 @@ if __name__ == "__main__":
 
         function getControlsForSimulation(id) {
             const controlsMap = {
+                'center-of-gravity': `
+                    <div class="control-item">
+                        <label class="control-label">Incline:</label>
+                        <input type="range" class="control-slider" id="cgAngleSlider" min="0" max="42" step="1" value="16" oninput="updateValue('cgAngleValue', this.value + '°'); drawSimulation()" style="width: 120px;">
+                        <span class="control-value-display" id="cgAngleValue">16°</span>
+                    </div>
+                    <div class="control-item">
+                        <label class="control-label">Object height:</label>
+                        <input type="range" class="control-slider" id="cgHeightSlider" min="0.5" max="1.9" step="0.05" value="1" oninput="updateValue('cgHeightValue', '×' + parseFloat(this.value).toFixed(2)); drawSimulation()" style="width: 120px;">
+                        <span class="control-value-display" id="cgHeightValue">×1.00</span>
+                    </div>
+                    <div class="control-item">
+                        <label class="control-label">Load position:</label>
+                        <input type="range" class="control-slider" id="cgLoadSlider" min="-1" max="1" step="0.05" value="0" oninput="updateValue('cgLoadValue', parseFloat(this.value).toFixed(2)); drawSimulation()" style="width: 120px;">
+                        <span class="control-value-display" id="cgLoadValue">0.00</span>
+                    </div>
+                    <div class="control-item">
+                        <label class="control-label">Base width:</label>
+                        <input type="range" class="control-slider" id="cgBaseSlider" min="0.5" max="1.5" step="0.05" value="1" oninput="updateValue('cgBaseValue', '×' + parseFloat(this.value).toFixed(2)); drawSimulation()" style="width: 120px;">
+                        <span class="control-value-display" id="cgBaseValue">×1.00</span>
+                    </div>
+                `,
                 'damped-oscillation': `
                     <div class="control-item">
                         <label class="control-label">Damping:</label>
@@ -4392,6 +4415,7 @@ if __name__ == "__main__":
 
             // PHYSICS
             if (sim === 'pendulum') drawPendulum(ctx, canvas);
+            else if (sim === 'center-of-gravity') drawCenterOfGravity(ctx, canvas);
             else if (sim === 'damped-oscillation') drawDampedOscillation(ctx, canvas);
             else if (sim === 'ecg-heartbeat') drawEcgHeartbeat(ctx, canvas);
             else if (sim === 'fermentation') drawFermentation(ctx, canvas);
@@ -4779,7 +4803,7 @@ if __name__ == "__main__":
         // ===== ADDED TOPICS (self-contained 2D canvas simulations) =====
         // Routed straight to the 2D renderer so they show their real diagram, not a generic 3D scene.
         // (was a list of sims without bespoke 3D scenes — all of them have real 3D scenes now)
-        window.TWOD_ONLY = new Set([]);
+        window.TWOD_ONLY = new Set(['center-of-gravity']);
         function nt_bg(ctx, c, a, b){ const g = ctx.createLinearGradient(0,0,0,c.height); g.addColorStop(0,a); g.addColorStop(1,b); ctx.fillStyle = g; ctx.fillRect(0,0,c.width,c.height); }
         function nt_txt(ctx, t, x, y, s, col, al){ ctx.save(); ctx.fillStyle = col || '#1f2937'; ctx.font = '600 ' + (s||14) + "px -apple-system,'Segoe UI',sans-serif"; ctx.textAlign = al || 'left'; ctx.fillText(t, x, y); ctx.restore(); }
 
@@ -4921,6 +4945,106 @@ function drawCaesarCipher(ctx, c){
             const ay = c.height-58, aStep = (c.width-startX-24)/26;
             ctx.font = '600 13px ui-monospace,Consolas,monospace';
             for (let i=0; i<26; i++){ const x = startX+i*aStep; ctx.fillStyle = '#a78bfa'; ctx.fillText(String.fromCharCode(65+i), x, ay); ctx.fillStyle = '#7c3aed'; ctx.fillText(String.fromCharCode((i+shift)%26+65), x, ay+20); }
+            ctx.textAlign = 'left';
+        }
+
+        // Center of Gravity & stability: a box on an incline. The object tips over when the plumb line
+        // from its center of gravity falls outside its base of support. Sliders change height, load, base, incline.
+        function drawCenterOfGravity(ctx, canvas) {
+            const W = canvas.width, H = canvas.height;
+            const angDeg = parseFloat(document.getElementById('cgAngleSlider')?.value || 16);
+            const heightF = parseFloat(document.getElementById('cgHeightSlider')?.value || 1);
+            const loadPos = parseFloat(document.getElementById('cgLoadSlider')?.value || 0);
+            const baseF = parseFloat(document.getElementById('cgBaseSlider')?.value || 1);
+            const theta = angDeg * Math.PI / 180;
+            const t = simulationState.time || 0;
+
+            const bg = ctx.createLinearGradient(0, 0, 0, H);
+            bg.addColorStop(0, '#eaf3ff'); bg.addColorStop(1, '#f8fbff');
+            ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+
+            const bw = Math.min(150, W * 0.28) * baseF;   // base width (px)
+            const bh = Math.min(150, H * 0.42) * heightF; // object height (px)
+            const half = bw / 2;
+
+            // combined centre of gravity in object-local (along-incline x from base centre, up y)
+            const Mb = 3, Ml = 2;
+            const loadX = loadPos * half * 0.82, loadUp = bh * 0.9;
+            const cgx = (Ml * loadX) / (Mb + Ml);
+            const cgy = (Mb * (bh / 2) + Ml * loadUp) / (Mb + Ml);
+
+            // stability: where the plumb line from the CoG meets the base (measured along the incline)
+            const xIntercept = cgx + cgy * Math.tan(theta);
+            const stable = Math.abs(xIntercept) <= half;
+            const tipDir = xIntercept >= 0 ? 1 : -1;
+            const tip = stable ? 0 : Math.min(1.45, 3.0 * t * t) * tipDir;   // accelerating fall when unstable
+
+            // scene axes
+            const baseX = W * 0.5, baseY = H * 0.64;
+            const u = { x: Math.cos(theta), y: Math.sin(theta) };    // along incline (downhill +)
+            const n = { x: Math.sin(theta), y: -Math.cos(theta) };   // out of the surface (up)
+            const peX = tipDir * half;                               // pivot edge (local, along)
+            // object-local (along a, up h) -> screen, including the tip rotation about the pivot edge
+            const TL = (a, h) => {
+                const da = a - peX, dh = h;
+                const a2 = peX + da * Math.cos(tip) - dh * Math.sin(tip);
+                const h2 = da * Math.sin(tip) + dh * Math.cos(tip);
+                return { x: baseX + a2 * u.x + h2 * n.x, y: baseY + a2 * u.y + h2 * n.y };
+            };
+
+            // ground / incline slab
+            const g0 = { x: baseX - u.x * W, y: baseY - u.y * W }, g1 = { x: baseX + u.x * W, y: baseY + u.y * W };
+            ctx.beginPath(); ctx.moveTo(g0.x, g0.y); ctx.lineTo(g1.x, g1.y); ctx.lineTo(g1.x, H + 20); ctx.lineTo(g0.x, H + 20); ctx.closePath();
+            const gg = ctx.createLinearGradient(0, baseY - 40, 0, H); gg.addColorStop(0, '#c3cfa8'); gg.addColorStop(1, '#8ea377');
+            ctx.fillStyle = gg; ctx.fill();
+            ctx.strokeStyle = '#5f7148'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(g0.x, g0.y); ctx.lineTo(g1.x, g1.y); ctx.stroke();
+
+            // object body
+            const c00 = TL(-half, 0), c10 = TL(half, 0), c11 = TL(half, bh), c01 = TL(-half, bh);
+            ctx.beginPath(); ctx.moveTo(c00.x, c00.y); ctx.lineTo(c10.x, c10.y); ctx.lineTo(c11.x, c11.y); ctx.lineTo(c01.x, c01.y); ctx.closePath();
+            const boxg = ctx.createLinearGradient(c01.x, c01.y, c10.x, c10.y); boxg.addColorStop(0, '#e7c98a'); boxg.addColorStop(1, '#cfa860');
+            ctx.fillStyle = boxg; ctx.fill(); ctx.strokeStyle = '#8a6d34'; ctx.lineWidth = 2.5; ctx.stroke();
+            // load block near the top
+            const lw = half * 0.7, lb0 = TL(loadX - lw, bh * 0.62), lb1 = TL(loadX + lw, bh * 0.62), lb2 = TL(loadX + lw, bh), lb3 = TL(loadX - lw, bh);
+            ctx.beginPath(); ctx.moveTo(lb0.x, lb0.y); ctx.lineTo(lb1.x, lb1.y); ctx.lineTo(lb2.x, lb2.y); ctx.lineTo(lb3.x, lb3.y); ctx.closePath();
+            ctx.fillStyle = '#4a6cf7'; ctx.fill(); ctx.strokeStyle = '#2b45a8'; ctx.lineWidth = 2; ctx.stroke();
+            const lc = TL(loadX, bh * 0.8); ctx.fillStyle = '#fff'; ctx.font = '700 13px Segoe UI, Arial'; ctx.textAlign = 'center'; ctx.fillText('load', lc.x, lc.y + 4);
+
+            // base of support (thick segment) — green if the plumb stays on it, red if not
+            const e0 = TL(-half, 0), e1 = TL(half, 0);
+            ctx.strokeStyle = stable ? '#16a34a' : '#dc2626'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(e0.x, e0.y); ctx.lineTo(e1.x, e1.y); ctx.stroke(); ctx.lineCap = 'butt';
+            // pivot edge marker
+            const pe = TL(peX, 0); ctx.fillStyle = stable ? '#16a34a' : '#dc2626'; ctx.beginPath(); ctx.arc(pe.x, pe.y, 5, 0, 7); ctx.fill();
+
+            // centre of gravity marker
+            const cg = TL(cgx, cgy);
+            // gravity plumb line: straight DOWN from the CoG to the base line
+            const sIsect = (cg.x - baseX) / (u.x || 1e-6);       // distance along incline where a vertical line under CoG meets the base
+            const isect = { x: cg.x, y: baseY + sIsect * u.y };
+            const insideBase = Math.abs(sIsect) <= half + 0.5;
+            ctx.strokeStyle = insideBase ? 'rgba(22,163,74,0.9)' : 'rgba(220,38,38,0.9)'; ctx.lineWidth = 2; ctx.setLineDash([6, 5]);
+            ctx.beginPath(); ctx.moveTo(cg.x, cg.y); ctx.lineTo(isect.x, isect.y + 4); ctx.stroke(); ctx.setLineDash([]);
+            // intercept dot on the base line
+            ctx.fillStyle = insideBase ? '#16a34a' : '#dc2626'; ctx.beginPath(); ctx.arc(isect.x, isect.y, 5, 0, 7); ctx.fill();
+            // CoG bullseye
+            ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(cg.x, cg.y, 9, 0, 7); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cg.x, cg.y, 9, -Math.PI / 2, 0); ctx.arc(cg.x, cg.y, 9, Math.PI / 2, Math.PI); ctx.fill();
+            ctx.strokeStyle = '#111'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cg.x, cg.y, 9, 0, 7); ctx.stroke();
+            ctx.fillStyle = '#111'; ctx.font = '700 12px Segoe UI, Arial'; ctx.textAlign = 'left'; ctx.fillText('CoG', cg.x + 13, cg.y - 8);
+
+            // status panel
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#1f2937'; ctx.font = '800 20px Segoe UI, Arial'; ctx.fillText('⚖️ Center of Gravity', 18, 34);
+            ctx.font = '800 22px Segoe UI, Arial';
+            ctx.fillStyle = stable ? '#16a34a' : '#dc2626';
+            ctx.fillText(stable ? '✓ STABLE' : '✗ TIPPING OVER!', 18, 64);
+            ctx.fillStyle = '#4b5563'; ctx.font = '600 13px Segoe UI, Arial';
+            const marginPx = Math.round(half - Math.abs(xIntercept));
+            ctx.fillText('Incline ' + Math.round(angDeg) + '°   ·   ' + (stable ? ('margin ' + marginPx + 'px before tipping') : 'gravity line is past the edge'), 18, 86);
+            // rule at the bottom
+            ctx.fillStyle = 'rgba(31,41,55,0.75)'; ctx.font = '600 12.5px Segoe UI, Arial'; ctx.textAlign = 'center';
+            ctx.fillText('An object tips when the plumb line from its center of gravity leaves the base of support.', W / 2, H - 14);
             ctx.textAlign = 'left';
         }
 
